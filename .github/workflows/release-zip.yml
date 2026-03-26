@@ -74,8 +74,7 @@ jobs:
           mkdir -p "${MODULE_DIR}"
 
           # Basic sanity checks
-          test -f config.xml
-          test -f index.php
+          test -f install.xml
 
           # Copy module contents into staging folder under paypercut/
           rsync -a ./ "${MODULE_DIR}/" \
