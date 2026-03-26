@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<modification>
+    <name>Paypercut Payments</name>
+    <version>1.0.1</version>
+    <author>Paypercut</author>
+    <link>https://paypercut.io</link>
+    <code>paypercut</code>
+    <file path="upload" />
+</modification>
