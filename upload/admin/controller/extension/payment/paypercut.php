@@ -423,7 +423,7 @@ class ControllerExtensionPaymentPaypercut extends Controller
                     $payload = array(
                         'name' => 'OpenCart - ' . HTTP_CATALOG,
                         'url' => $webhook_url,
-                        'enabled_events' => array('*') // All events
+                        'enabled_events' => array('checkout_session.completed')
                     );
 
                     $ch = curl_init();
