@@ -19,10 +19,10 @@
 ## Procedure
 
 1. Step with the exact command or UI path.
-   ```bash
-   # example
-   git status
-   ```
+    ```bash
+    # example
+    git status
+    ```
 2. State the expected observation after the step.
 3. Next step…
 
@@ -39,8 +39,8 @@ possible, state that and describe the mitigation instead.
 ## Troubleshooting
 
 | Symptom | Likely cause | Action |
-|---|---|---|
-| … | … | … |
+| ------- | ------------ | ------ |
+| …       | …            | …      |
 
 ## Escalation
 

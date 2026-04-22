@@ -23,34 +23,34 @@
 1. **Reproduce and capture the order id.** Ask the merchant for the affected
    OpenCart order number and the PayPerCut session/payment id.
 2. **Check PayPerCut side.** In the PayPerCut dashboard → Webhooks, confirm:
-   - An endpoint is registered pointing at the merchant's store.
-   - The subscribed events include `checkout_session.completed` (this is the
-     only event the plugin consumes — see commit `66b9959`).
-   - Recent delivery attempts to that endpoint. Note the HTTP status returned
-     by the store.
+    - An endpoint is registered pointing at the merchant's store.
+    - The subscribed events include `checkout_session.completed` (this is the
+      only event the plugin consumes — see commit `66b9959`).
+    - Recent delivery attempts to that endpoint. Note the HTTP status returned
+      by the store.
 3. **Check store side.** In OpenCart admin, open **Sales → PayPerCut Logs** and
    search for the session id. Determine which of these you have:
-   - No entry at all → the webhook never reached the store.
-   - Entry with error → the store received it but failed to process.
-   - Entry with success → the webhook was processed; the order-status mapping
-     or cache is the suspect.
+    - No entry at all → the webhook never reached the store.
+    - Entry with error → the store received it but failed to process.
+    - Entry with success → the webhook was processed; the order-status mapping
+      or cache is the suspect.
 4. **If the webhook never reached the store**, test the endpoint from outside:
-   ```bash
-   curl -i -X POST \
-     "https://<merchant-domain>/index.php?route=extension/payment/paypercut/webhook" \
-     -H "Content-Type: application/json" \
-     -d '{"type":"ping"}'
-   ```
-   Expect a non-5xx response. 404 means URL rewriting or route mismatch; 5xx
-   means a server-side error — check the store's PHP error log.
+    ```bash
+    curl -i -X POST \
+      "https://<merchant-domain>/index.php?route=extension/payment/paypercut/webhook" \
+      -H "Content-Type: application/json" \
+      -d '{"type":"ping"}'
+    ```
+    Expect a non-5xx response. 404 means URL rewriting or route mismatch; 5xx
+    means a server-side error — check the store's PHP error log.
 5. **If the webhook arrived but failed**, open the log entry and capture:
-   - Exception / error message
-   - Request body
-   - OpenCart order id referenced in the payload
-   Cross-check the code path in
-   [upload/catalog/controller/extension/payment/paypercut.php](../../upload/catalog/controller/extension/payment/paypercut.php)
-   and the model in
-   [upload/catalog/model/extension/payment/paypercut.php](../../upload/catalog/model/extension/payment/paypercut.php).
+    - Exception / error message
+    - Request body
+    - OpenCart order id referenced in the payload
+      Cross-check the code path in
+      [upload/catalog/controller/extension/payment/paypercut.php](../../upload/catalog/controller/extension/payment/paypercut.php)
+      and the model in
+      [upload/catalog/model/extension/payment/paypercut.php](../../upload/catalog/model/extension/payment/paypercut.php).
 6. **Manually reconcile the order** so the merchant is unblocked while the root
    cause is fixed. In the PayPerCut dashboard, find the event and click
    **Resend**. Verify the order updates. If resend is unavailable, update the
@@ -72,13 +72,13 @@ confirm the final status is the intended one.
 
 ## Troubleshooting
 
-| Symptom | Likely cause | Action |
-|---|---|---|
-| All deliveries return 404 | Webhook URL typo, or SEO URLs hiding `index.php` route | Reconfigure URL in PayPerCut dashboard |
-| Deliveries return 401/403 | Signing secret mismatch after key rotation | Run [rotate-api-credentials.md](rotate-api-credentials.md) end-to-end |
-| Deliveries return 500 | PHP error in handler | Capture stack trace from store error log; file an issue with reproduction |
-| Logs show signature verification failure | Clock skew or wrong secret | Check server time (`date -u`) and re-copy the webhook secret |
-| Event type not `checkout_session.completed` | Extra events subscribed on dashboard | Narrow subscription to `checkout_session.completed` only |
+| Symptom                                     | Likely cause                                           | Action                                                                    |
+| ------------------------------------------- | ------------------------------------------------------ | ------------------------------------------------------------------------- |
+| All deliveries return 404                   | Webhook URL typo, or SEO URLs hiding `index.php` route | Reconfigure URL in PayPerCut dashboard                                    |
+| Deliveries return 401/403                   | Signing secret mismatch after key rotation             | Run [rotate-api-credentials.md](rotate-api-credentials.md) end-to-end     |
+| Deliveries return 500                       | PHP error in handler                                   | Capture stack trace from store error log; file an issue with reproduction |
+| Logs show signature verification failure    | Clock skew or wrong secret                             | Check server time (`date -u`) and re-copy the webhook secret              |
+| Event type not `checkout_session.completed` | Extra events subscribed on dashboard                   | Narrow subscription to `checkout_session.completed` only                  |
 
 ## Escalation
 

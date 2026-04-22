@@ -31,9 +31,9 @@
    **PayPerCut Payments**, and click **Install** (green plus) if this is a
    first-time install. For upgrades, the extension remains installed.
 5. Click **Edit** (blue pencil) on **PayPerCut Payments** and fill in:
-   - API key / secret (merchant's PayPerCut credentials)
-   - Status: `Enabled`
-   - Order statuses as per merchant preference
+    - API key / secret (merchant's PayPerCut credentials)
+    - Status: `Enabled`
+    - Order statuses as per merchant preference
 6. Save. If this is an upgrade, clear any OpenCart cache the store uses
    (Twig/SASS cache, Modifications cache).
 
@@ -56,12 +56,12 @@
 
 ## Troubleshooting
 
-| Symptom | Likely cause | Action |
-|---|---|---|
-| Upload fails with permission error | `upload/` or `system/storage` not writable | Fix filesystem permissions, retry |
-| Module not visible under Payments | Modifications not refreshed | Click **Refresh** in Extensions → Modifications |
-| Checkout shows no PayPerCut option | Not enabled, or geo/currency restriction | Re-check extension settings and cart currency |
-| Test order errors out | Bad API credentials | Re-enter credentials; see [webhook-not-received.md](webhook-not-received.md) for post-payment issues |
+| Symptom                            | Likely cause                               | Action                                                                                               |
+| ---------------------------------- | ------------------------------------------ | ---------------------------------------------------------------------------------------------------- |
+| Upload fails with permission error | `upload/` or `system/storage` not writable | Fix filesystem permissions, retry                                                                    |
+| Module not visible under Payments  | Modifications not refreshed                | Click **Refresh** in Extensions → Modifications                                                      |
+| Checkout shows no PayPerCut option | Not enabled, or geo/currency restriction   | Re-check extension settings and cart currency                                                        |
+| Test order errors out              | Bad API credentials                        | Re-enter credentials; see [webhook-not-received.md](webhook-not-received.md) for post-payment issues |
 
 ## Escalation
 

@@ -21,25 +21,25 @@
 ## Procedure
 
 1. Ensure you are on an up-to-date `main`.
-   ```bash
-   git checkout main
-   git pull --ff-only
-   ```
+    ```bash
+    git checkout main
+    git pull --ff-only
+    ```
 2. Confirm the latest commit is what you intend to release.
-   ```bash
-   git log --oneline -n 5
-   ```
+    ```bash
+    git log --oneline -n 5
+    ```
 3. Create and push an annotated tag. Replace `X.Y.Z` with the new version.
-   ```bash
-   VERSION=X.Y.Z
-   git tag -a "v${VERSION}" -m "Release v${VERSION}"
-   git push origin "v${VERSION}"
-   ```
+    ```bash
+    VERSION=X.Y.Z
+    git tag -a "v${VERSION}" -m "Release v${VERSION}"
+    git push origin "v${VERSION}"
+    ```
 4. The [`Release OpenCart Module ZIP`](../../.github/workflows/release-zip.yml)
    workflow runs automatically on `v*` tags. Watch it complete:
-   ```bash
-   gh run watch --exit-status
-   ```
+    ```bash
+    gh run watch --exit-status
+    ```
 
 ## Verification
 
@@ -47,10 +47,10 @@
 - A new GitHub Release named `v${VERSION}` exists with asset
   `paypercut-opencartv2-${VERSION}.ocmod.zip` attached.
 - Download the asset and confirm:
-  ```bash
-  unzip -l paypercut-opencartv2-${VERSION}.ocmod.zip | head
-  # Expect install.xml and upload/ at the zip root, no docs/ or .github/.
-  ```
+    ```bash
+    unzip -l paypercut-opencartv2-${VERSION}.ocmod.zip | head
+    # Expect install.xml and upload/ at the zip root, no docs/ or .github/.
+    ```
 - `install.xml` inside the zip has `<version>${VERSION}</version>`.
 
 ## Rollback
@@ -58,14 +58,14 @@
 If the workflow failed or produced a bad asset:
 
 1. Delete the GitHub Release (keeps the tag).
-   ```bash
-   gh release delete "v${VERSION}" --yes
-   ```
+    ```bash
+    gh release delete "v${VERSION}" --yes
+    ```
 2. Delete the tag locally and remotely.
-   ```bash
-   git tag -d "v${VERSION}"
-   git push origin ":refs/tags/v${VERSION}"
-   ```
+    ```bash
+    git tag -d "v${VERSION}"
+    git push origin ":refs/tags/v${VERSION}"
+    ```
 3. Fix the underlying issue on `main`, then re-run this runbook with the same
    or a bumped version.
 
@@ -74,11 +74,11 @@ If merchants have already downloaded the bad asset, follow
 
 ## Troubleshooting
 
-| Symptom | Likely cause | Action |
-|---|---|---|
-| Workflow fails at `Verify ZIP contents` | `install.xml` or `upload/` missing | Restore files on `main`, re-tag |
-| Release created without asset | `softprops/action-gh-release` step failed | Check workflow logs, re-run failed jobs |
-| Tag push rejected | Tag already exists | Pick next patch version; never reuse a published tag |
+| Symptom                                 | Likely cause                              | Action                                               |
+| --------------------------------------- | ----------------------------------------- | ---------------------------------------------------- |
+| Workflow fails at `Verify ZIP contents` | `install.xml` or `upload/` missing        | Restore files on `main`, re-tag                      |
+| Release created without asset           | `softprops/action-gh-release` step failed | Check workflow logs, re-run failed jobs              |
+| Tag push rejected                       | Tag already exists                        | Pick next patch version; never reuse a published tag |
 
 ## Escalation
 

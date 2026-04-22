@@ -8,15 +8,15 @@ is a short, skimmable, command-first document for a single scenario.
 
 ## Index
 
-| Runbook | Trigger | Severity | Last verified |
-|---|---|---|---|
-| [release-new-version.md](release-new-version.md) | Cutting a new plugin version | routine | 2026-04-22 |
-| [install-upgrade-module.md](install-upgrade-module.md) | Merchant installs or upgrades | routine | 2026-04-22 |
-| [webhook-not-received.md](webhook-not-received.md) | Orders not completing after payment | SEV-2 | 2026-04-22 |
-| [rollback-release.md](rollback-release.md) | Regression in a published release | SEV-2 | _pending_ |
-| [payment-stuck-pending.md](payment-stuck-pending.md) | Order stays in pending state | SEV-3 | _pending_ |
-| [rotate-api-credentials.md](rotate-api-credentials.md) | Credential rotation / leak | SEV-2 | _pending_ |
-| [incident-response.md](incident-response.md) | Any SEV-1/SEV-2 declared | SEV-1 | _pending_ |
+| Runbook                                                | Trigger                             | Severity | Last verified |
+| ------------------------------------------------------ | ----------------------------------- | -------- | ------------- |
+| [release-new-version.md](release-new-version.md)       | Cutting a new plugin version        | routine  | 2026-04-22    |
+| [install-upgrade-module.md](install-upgrade-module.md) | Merchant installs or upgrades       | routine  | 2026-04-22    |
+| [webhook-not-received.md](webhook-not-received.md)     | Orders not completing after payment | SEV-2    | 2026-04-22    |
+| [rollback-release.md](rollback-release.md)             | Regression in a published release   | SEV-2    | _pending_     |
+| [payment-stuck-pending.md](payment-stuck-pending.md)   | Order stays in pending state        | SEV-3    | _pending_     |
+| [rotate-api-credentials.md](rotate-api-credentials.md) | Credential rotation / leak          | SEV-2    | _pending_     |
+| [incident-response.md](incident-response.md)           | Any SEV-1/SEV-2 declared            | SEV-1    | _pending_     |
 
 ## Conventions
 
@@ -41,9 +41,9 @@ is a short, skimmable, command-first document for a single scenario.
 
 ## Severity guide
 
-| Level | Meaning | Response |
-|---|---|---|
-| SEV-1 | Payments broken for all merchants | Page immediately, start incident channel |
-| SEV-2 | Payments broken for a subset, or admin tooling broken | Respond within business hours same day |
-| SEV-3 | Degraded experience, workaround exists | Next business day |
-| routine | Planned/operational work | Scheduled |
+| Level   | Meaning                                               | Response                                 |
+| ------- | ----------------------------------------------------- | ---------------------------------------- |
+| SEV-1   | Payments broken for all merchants                     | Page immediately, start incident channel |
+| SEV-2   | Payments broken for a subset, or admin tooling broken | Respond within business hours same day   |
+| SEV-3   | Degraded experience, workaround exists                | Next business day                        |
+| routine | Planned/operational work                              | Scheduled                                |
