@@ -93,13 +93,6 @@ The file is intentionally **not** removed on plugin uninstall.
 
 - `curl -fsSI https://<merchant-domain>/.well-known/apple-developer-merchantid-domain-association`
   returns `HTTP/2 200` (or `HTTP/1.1 200 OK`) with no redirect.
-- Body sha256 matches the CDN copy:
-    ```bash
-    diff \
-      <(curl -fsSL "https://<merchant-domain>/.well-known/apple-developer-merchantid-domain-association") \
-      <(curl -fsSL "https://cdn.paypercut.io/.well-known/apple-developer-merchantid-domain-association")
-    ```
-    Empty diff = match.
 - PayPerCut dashboard shows the merchant's domain as `enabled: true` for
   Apple Pay.
 - Apple Pay button appears at checkout on Safari (macOS / iOS) for an
