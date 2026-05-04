@@ -62,3 +62,12 @@ $_['text_connection_failed'] = 'Échec de la connexion';
 
 // Button
 $_['button_test_connection'] = 'Tester la Connexion';
+
+// Apple Pay domain verification file
+$_['text_apple_domain_file_ok'] = 'Le fichier de vérification de domaine Apple Pay est en place.';
+$_['text_apple_domain_file_missing'] = 'Le fichier de vérification de domaine Apple Pay est manquant. Enregistrez le formulaire ou cliquez sur Actualiser pour le créer.';
+$_['text_apple_domain_file_unreachable'] = 'Le fichier est sur le disque mais la boutique ne l\'a pas renvoyé via HTTPS. Consultez le runbook Apple Pay.';
+$_['text_apple_domain_file_path'] = 'Chemin : %s';
+$_['text_apple_domain_file_refreshing'] = 'Actualisation depuis le CDN PayPerCut...';
+$_['button_apple_domain_refresh'] = 'Actualiser depuis le CDN PayPerCut';
+$_['error_apple_domain_write'] = 'Impossible d\'écrire le fichier de vérification Apple Pay (chemin cible : %s). Vérifiez les permissions du système de fichiers pour la racine web d\'OpenCart ou téléversez le fichier manuellement.';

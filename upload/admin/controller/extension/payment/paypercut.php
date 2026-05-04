@@ -14,6 +14,20 @@ class ControllerExtensionPaymentPaypercut extends Controller
         if (($this->request->server['REQUEST_METHOD'] == 'POST') && $this->validate()) {
             $this->model_setting_setting->editSetting('paypercut', $this->request->post);
 
+            $apple_file_status = $this->ensureAppleDomainAssociationFile();
+            if (empty($apple_file_status['ok'])) {
+                $apple_warning = sprintf(
+                    $this->language->get('error_apple_domain_write'),
+                    isset($apple_file_status['path']) ? $apple_file_status['path'] : ''
+                );
+                // validate() may have already set a domain-registration warning; preserve it.
+                if (!empty($this->session->data['warning'])) {
+                    $this->session->data['warning'] .= ' ' . $apple_warning;
+                } else {
+                    $this->session->data['warning'] = $apple_warning;
+                }
+            }
+
             $this->session->data['success'] = $this->language->get('text_success');
 
             $this->response->redirect($this->url->link('extension/extension', 'token=' . $this->session->data['token'] . '&type=payment', true));
@@ -202,6 +216,15 @@ class ControllerExtensionPaymentPaypercut extends Controller
         } else {
             $data['error_currency'] = '';
         }
+
+        // Apple Pay domain association file status (for the wallet panel banner)
+        $data['apple_domain_status'] = $this->getAppleDomainAssociationStatus();
+        $data['text_apple_domain_file_ok'] = $this->language->get('text_apple_domain_file_ok');
+        $data['text_apple_domain_file_missing'] = $this->language->get('text_apple_domain_file_missing');
+        $data['text_apple_domain_file_unreachable'] = $this->language->get('text_apple_domain_file_unreachable');
+        $data['text_apple_domain_file_path'] = $this->language->get('text_apple_domain_file_path');
+        $data['text_apple_domain_file_refreshing'] = $this->language->get('text_apple_domain_file_refreshing');
+        $data['button_apple_domain_refresh'] = $this->language->get('button_apple_domain_refresh');
 
         $data['header'] = $this->load->controller('common/header');
         $data['column_left'] = $this->load->controller('common/column_left');
@@ -841,6 +864,10 @@ class ControllerExtensionPaymentPaypercut extends Controller
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_general_ci;
         ");
 
+        // Place the Apple Pay domain-association file under <opencart_root>/.well-known/.
+        // Failure here does not abort install — the admin settings banner surfaces it.
+        $this->ensureAppleDomainAssociationFile();
+
         // Register event for order info page to display Paypercut payment information
         $this->load->model('extension/event');
         $this->model_extension_event->addEvent(
@@ -860,11 +887,203 @@ class ControllerExtensionPaymentPaypercut extends Controller
         $this->load->model('extension/event');
         $this->model_extension_event->deleteEvent('paypercut_order_info');
 
-        // Note: We intentionally don't drop database tables to preserve transaction history
+        // Note: We intentionally don't drop database tables to preserve transaction history.
+        // We also intentionally leave <opencart_root>/.well-known/apple-developer-merchantid-domain-association
+        // in place — the file is non-sensitive, and removing it would break Apple Pay
+        // verification if the merchant reinstalls the extension or another tool relies on
+        // .well-known/ (e.g. ACME challenges).
         // If you want to completely remove all data, manually drop these tables:
         // - oc_paypercut_customer
         // - oc_paypercut_transaction
         // - oc_paypercut_refund
         // - oc_paypercut_webhook_log
+    }
+
+    /**
+     * AJAX endpoint: re-fetch the Apple Pay domain-association file from the CDN
+     * (or fall back to the bundled copy) and write it to the storefront webroot.
+     */
+    public function refreshAppleDomainFile()
+    {
+        $this->load->language('extension/payment/paypercut');
+
+        $json = array();
+
+        if (!$this->user->hasPermission('modify', 'extension/payment/paypercut')) {
+            $json['error'] = $this->language->get('error_permission');
+        } else {
+            $result = $this->ensureAppleDomainAssociationFile();
+            if (!empty($result['ok'])) {
+                $json['success'] = true;
+                $json['path'] = $result['path'];
+                $json['source'] = $result['source'];
+                $json['reachable'] = $result['reachable'];
+                $json['bytes'] = $result['bytes'];
+            } else {
+                $json['error'] = sprintf(
+                    $this->language->get('error_apple_domain_write'),
+                    isset($result['path']) ? $result['path'] : ''
+                );
+                $json['reason'] = isset($result['reason']) ? $result['reason'] : 'unknown';
+                $json['path'] = isset($result['path']) ? $result['path'] : '';
+            }
+        }
+
+        $this->response->addHeader('Content-Type: application/json');
+        $this->response->setOutput(json_encode($json));
+    }
+
+    /**
+     * Read current state of the Apple Pay domain-association file for view rendering.
+     * No network calls — safe to invoke on every page render.
+     */
+    private function getAppleDomainAssociationStatus()
+    {
+        $target_file = dirname(DIR_APPLICATION) . '/.well-known/apple-developer-merchantid-domain-association';
+
+        return array(
+            'present' => is_file($target_file),
+            'path' => $target_file,
+            'last_refreshed' => $this->config->get('paypercut_apple_domain_file_at'),
+            'source' => $this->config->get('paypercut_apple_domain_file_source'),
+            'reachable' => $this->config->get('paypercut_apple_domain_file_reachable')
+        );
+    }
+
+    /**
+     * Place the Apple Pay domain-association file at
+     * <opencart_root>/.well-known/apple-developer-merchantid-domain-association.
+     *
+     * Hybrid source: try the PayPerCut CDN first, fall back to the bundled copy
+     * shipped under upload/system/library/paypercut/apple-pay/ when the CDN is
+     * unreachable. Idempotent — safe to call from install() and from every
+     * settings save. Never throws; always returns a status array.
+     */
+    private function ensureAppleDomainAssociationFile()
+    {
+        $target_dir = dirname(DIR_APPLICATION) . '/.well-known';
+        $target_file = $target_dir . '/apple-developer-merchantid-domain-association';
+        $bundled = DIR_SYSTEM . 'library/paypercut/apple-pay/apple-developer-merchantid-domain-association';
+        $cdn_url = 'https://cdn.paypercut.io/.well-known/apple-developer-merchantid-domain-association';
+
+        // 1. Source bytes — CDN first (3s budget), bundled fallback.
+        $source = 'bundled';
+        $bytes = false;
+
+        if (function_exists('curl_init')) {
+            $ch = curl_init();
+            curl_setopt($ch, CURLOPT_URL, $cdn_url);
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch, CURLOPT_FOLLOWLOCATION, false);
+            curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 3);
+            curl_setopt($ch, CURLOPT_TIMEOUT, 3);
+            $response = curl_exec($ch);
+            $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            curl_close($ch);
+
+            if ($http_code == 200 && is_string($response)) {
+                $len = strlen($response);
+                if ($len >= 50 && $len <= 4096) {
+                    $bytes = $response;
+                    $source = 'cdn';
+                }
+            }
+        }
+
+        if ($bytes === false && is_readable($bundled)) {
+            $bundled_bytes = file_get_contents($bundled);
+            if ($bundled_bytes !== false && $bundled_bytes !== '') {
+                $bytes = $bundled_bytes;
+            }
+        }
+
+        if ($bytes === false || $bytes === '') {
+            $this->log->write('Paypercut Apple Pay: no source bytes available (CDN failed and bundled file missing at ' . $bundled . ')');
+            return array(
+                'ok' => false,
+                'reason' => 'no_source',
+                'path' => $target_file
+            );
+        }
+
+        // 2. Ensure target directory exists.
+        if (!is_dir($target_dir)) {
+            if (!@mkdir($target_dir, 0755, true) && !is_dir($target_dir)) {
+                $this->log->write('Paypercut Apple Pay: failed to create directory ' . $target_dir);
+                return array(
+                    'ok' => false,
+                    'reason' => 'mkdir_failed',
+                    'path' => $target_file
+                );
+            }
+        }
+
+        // 3. Drop a permissive .htaccess if none exists. Some shared-hosting Apache
+        // configs deny dotfile directories by default; this keeps Apple's verifier
+        // from getting a 403. We do not overwrite an existing .htaccess (the merchant
+        // or another tool — e.g. Let's Encrypt — may already manage it).
+        $htaccess = $target_dir . '/.htaccess';
+        if (!file_exists($htaccess)) {
+            $htaccess_body = "# PayPerCut: allow public access to .well-known/ for Apple Pay domain verification.\n"
+                           . "<IfModule mod_authz_core.c>\n"
+                           . "    Require all granted\n"
+                           . "</IfModule>\n"
+                           . "<IfModule !mod_authz_core.c>\n"
+                           . "    Order allow,deny\n"
+                           . "    Allow from all\n"
+                           . "</IfModule>\n";
+            @file_put_contents($htaccess, $htaccess_body);
+            @chmod($htaccess, 0644);
+        }
+
+        // 4. Write the file atomically.
+        $written = @file_put_contents($target_file, $bytes, LOCK_EX);
+        if ($written === false) {
+            $this->log->write('Paypercut Apple Pay: failed to write ' . $target_file);
+            return array(
+                'ok' => false,
+                'reason' => 'write_failed',
+                'path' => $target_file
+            );
+        }
+        @chmod($target_file, 0644);
+
+        // 5. Best-effort self-test — does the catalog hostname actually serve it?
+        // Failure here is non-fatal; the file may still be reachable from Apple's
+        // verifier even when the OpenCart admin host can't reach the catalog host.
+        $reachable = null;
+        if (defined('HTTPS_CATALOG') && function_exists('curl_init')) {
+            $catalog_host = parse_url(HTTPS_CATALOG, PHP_URL_HOST);
+            if ($catalog_host) {
+                $verify_url = 'https://' . $catalog_host . '/.well-known/apple-developer-merchantid-domain-association';
+                $ch = curl_init();
+                curl_setopt($ch, CURLOPT_URL, $verify_url);
+                curl_setopt($ch, CURLOPT_NOBODY, true);
+                curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+                curl_setopt($ch, CURLOPT_FOLLOWLOCATION, false);
+                curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 3);
+                curl_setopt($ch, CURLOPT_TIMEOUT, 3);
+                curl_exec($ch);
+                $verify_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+                curl_close($ch);
+                $reachable = ($verify_code == 200);
+            }
+        }
+
+        // 6. Persist metadata so the settings page banner can show last-refreshed/source/reachable.
+        $this->load->model('setting/setting');
+        $settings = $this->model_setting_setting->getSetting('paypercut');
+        $settings['paypercut_apple_domain_file_at'] = date('c');
+        $settings['paypercut_apple_domain_file_source'] = $source;
+        $settings['paypercut_apple_domain_file_reachable'] = $reachable === null ? '' : ($reachable ? '1' : '0');
+        $this->model_setting_setting->editSetting('paypercut', $settings);
+
+        return array(
+            'ok' => true,
+            'path' => $target_file,
+            'source' => $source,
+            'reachable' => $reachable,
+            'bytes' => strlen($bytes)
+        );
     }
 }

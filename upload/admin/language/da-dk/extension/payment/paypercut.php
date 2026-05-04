@@ -62,3 +62,12 @@ $_['text_connection_failed'] = 'Forbindelse mislykkedes';
 
 // Button
 $_['button_test_connection'] = 'Test forbindelse';
+
+// Apple Pay domain verification file
+$_['text_apple_domain_file_ok'] = 'Apple Pay-domæneverifikationsfilen er på plads.';
+$_['text_apple_domain_file_missing'] = 'Apple Pay-domæneverifikationsfilen mangler. Gem formularen eller klik på Opdater for at oprette den.';
+$_['text_apple_domain_file_unreachable'] = 'Filen er på disken, men butikken returnerede den ikke over HTTPS. Se Apple Pay-runbook.';
+$_['text_apple_domain_file_path'] = 'Sti: %s';
+$_['text_apple_domain_file_refreshing'] = 'Opdaterer fra PayPerCut CDN...';
+$_['button_apple_domain_refresh'] = 'Opdater fra PayPerCut CDN';
+$_['error_apple_domain_write'] = 'Kunne ikke skrive Apple Pay-verifikationsfilen (målsti: %s). Tjek filsystemtilladelser for OpenCarts webroot, eller upload filen manuelt.';

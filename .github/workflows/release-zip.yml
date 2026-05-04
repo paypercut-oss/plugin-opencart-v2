@@ -59,6 +59,29 @@ jobs:
           VERSION: ${{ steps.meta.outputs.version }}
           XML_FILE: install.xml
 
+      - name: Verify Apple Pay domain-association file matches CDN
+        shell: bash
+        run: |
+          set -euo pipefail
+          BUNDLED="upload/system/library/paypercut/apple-pay/apple-developer-merchantid-domain-association"
+          CDN_URL="https://cdn.paypercut.io/.well-known/apple-developer-merchantid-domain-association"
+          if [ ! -f "$BUNDLED" ]; then
+            echo "ERROR: bundled Apple Pay verification file is missing at $BUNDLED"
+            exit 1
+          fi
+          BUNDLED_SHA=$(sha256sum "$BUNDLED" | awk '{print $1}')
+          CDN_SHA=$(curl -fsSL "$CDN_URL" | sha256sum | awk '{print $1}')
+          echo "Bundled sha256: $BUNDLED_SHA"
+          echo "CDN     sha256: $CDN_SHA"
+          if [ "$BUNDLED_SHA" != "$CDN_SHA" ]; then
+            echo "ERROR: bundled Apple Pay file differs from PayPerCut CDN copy."
+            echo "       PayPerCut may have rotated the verification file."
+            echo "       Refresh the bundle and re-tag the release:"
+            echo "         curl -fsSL $CDN_URL -o $BUNDLED"
+            exit 1
+          fi
+          echo "OK: bundled Apple Pay file matches CDN."
+
       - name: Build ZIP (module contents at ZIP root)
         shell: bash
         run: |
@@ -105,6 +128,8 @@ jobs:
           # Ensure module lives under paypercut/
           zipinfo -1 "$ZIP" | grep -x "upload/" >/dev/null
           zipinfo -1 "$ZIP" | grep -x "install.xml" >/dev/null
+          # Ensure the bundled Apple Pay verification file ships with the release.
+          zipinfo -1 "$ZIP" | grep -x "upload/system/library/paypercut/apple-pay/apple-developer-merchantid-domain-association" >/dev/null
 
       - name: Create GitHub Release + upload ZIP
         uses: softprops/action-gh-release@v2

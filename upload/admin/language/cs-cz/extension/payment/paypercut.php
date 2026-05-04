@@ -62,3 +62,12 @@ $_['text_connection_failed'] = 'Připojení selhalo';
 
 // Button
 $_['button_test_connection'] = 'Test připojení';
+
+// Apple Pay domain verification file
+$_['text_apple_domain_file_ok'] = 'Ověřovací soubor domény Apple Pay je na místě.';
+$_['text_apple_domain_file_missing'] = 'Ověřovací soubor domény Apple Pay chybí. Uložte formulář nebo klikněte na Obnovit pro jeho vytvoření.';
+$_['text_apple_domain_file_unreachable'] = 'Soubor je na disku, ale obchod jej nevrátil přes HTTPS. Viz příručka Apple Pay.';
+$_['text_apple_domain_file_path'] = 'Cesta: %s';
+$_['text_apple_domain_file_refreshing'] = 'Obnovuje se z PayPerCut CDN...';
+$_['button_apple_domain_refresh'] = 'Obnovit z PayPerCut CDN';
+$_['error_apple_domain_write'] = 'Nelze zapsat ověřovací soubor Apple Pay (cílová cesta: %s). Zkontrolujte oprávnění souborového systému pro kořenový adresář OpenCart nebo nahrajte soubor ručně.';

@@ -44,6 +44,10 @@
 - Storefront checkout shows PayPerCut as a payment option for an eligible cart.
 - Place a test order; it reaches PayPerCut hosted checkout successfully.
 - Admin **Sales → PayPerCut Logs** records the test order request/response.
+- `curl -fsSI https://<merchant-domain>/.well-known/apple-developer-merchantid-domain-association`
+  returns `HTTP/* 200 OK` with no redirect. The plugin places this file on
+  install and on every settings save — see
+  [apple-pay-domain-file.md](apple-pay-domain-file.md) if it is missing.
 
 ## Rollback
 
@@ -68,6 +72,8 @@
 - If install succeeds but payments misbehave, hand off to
   [webhook-not-received.md](webhook-not-received.md) or
   [payment-stuck-pending.md](payment-stuck-pending.md).
+- If Apple Pay does not appear at checkout, see
+  [apple-pay-domain-file.md](apple-pay-domain-file.md).
 - For permission/server issues, escalate to the merchant's hosting support.
 
 ## References

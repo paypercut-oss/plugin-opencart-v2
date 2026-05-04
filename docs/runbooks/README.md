@@ -13,6 +13,7 @@ is a short, skimmable, command-first document for a single scenario.
 | [release-new-version.md](release-new-version.md)       | Cutting a new plugin version        | routine  | 2026-04-22    |
 | [install-upgrade-module.md](install-upgrade-module.md) | Merchant installs or upgrades       | routine  | 2026-04-22    |
 | [webhook-not-received.md](webhook-not-received.md)     | Orders not completing after payment | SEV-2    | 2026-04-22    |
+| [apple-pay-domain-file.md](apple-pay-domain-file.md)   | Apple Pay verification file missing or unreachable | SEV-3    | 2026-05-04    |
 | [rollback-release.md](rollback-release.md)             | Regression in a published release   | SEV-2    | _pending_     |
 | [payment-stuck-pending.md](payment-stuck-pending.md)   | Order stays in pending state        | SEV-3    | _pending_     |
 | [rotate-api-credentials.md](rotate-api-credentials.md) | Credential rotation / leak          | SEV-2    | _pending_     |

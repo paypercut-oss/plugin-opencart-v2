@@ -38,6 +38,7 @@ $_['error_permission'] = 'Warning: You do not have permission to modify Paypercu
 $_['error_api_key'] = 'API Key Required!';
 $_['error_statement_descriptor'] = 'Statement descriptor must be 22 characters or less!';
 $_['error_unsupported_currency'] = 'Warning: Your store currency (%s) is not supported by Paypercut. Supported currencies: BGN, DKK, SEK, NOK, GBP, EUR, USD, CHF, CZK, HUF, PLN, RON';
+$_['error_apple_domain_write'] = 'Could not write the Apple Pay verification file (target path: %s). Check filesystem permissions for OpenCart\'s webroot or upload the file manually.';
 
 // Text
 $_['text_mode_test'] = 'Test Mode';
@@ -59,6 +60,11 @@ $_['text_wallet_settings'] = 'Wallet Settings';
 $_['text_testing_connection'] = 'Testing connection...';
 $_['text_connection_success'] = 'Connection successful!';
 $_['text_connection_failed'] = 'Connection failed';
+$_['text_apple_domain_file_ok'] = 'Apple Pay domain verification file is in place.';
+$_['text_apple_domain_file_missing'] = 'Apple Pay domain verification file is missing. Save the form or click Refresh to create it.';
+$_['text_apple_domain_file_unreachable'] = 'File is on disk but the storefront did not return it over HTTPS. See the Apple Pay runbook.';
+$_['text_apple_domain_file_path'] = 'Path: %s';
+$_['text_apple_domain_file_refreshing'] = 'Refreshing from PayPerCut CDN...';
 
 // Refund
 $_['text_refund_success'] = 'Refund processed successfully!';
@@ -75,3 +81,4 @@ $_['error_refund_failed'] = 'Refund failed. Please try again or contact support.
 
 // Button
 $_['button_test_connection'] = 'Test Connection';
+$_['button_apple_domain_refresh'] = 'Refresh from PayPerCut CDN';
