@@ -159,6 +159,33 @@
                     <?php } ?>
                   </select>
                   <span class="help-block"><i class="fa fa-info-circle"></i> <?php echo $help_apple_pay; ?></span>
+                  <div id="apple-domain-file-status" style="margin-top: 10px;">
+                    <?php if ($apple_domain_status['present'] && $apple_domain_status['reachable'] !== '0') { ?>
+                      <div class="alert alert-success" style="margin-bottom: 0;">
+                        <i class="fa fa-check-circle"></i> <?php echo $text_apple_domain_file_ok; ?>
+                        <small class="text-muted" style="display: block; margin-top: 3px;">
+                          <?php echo sprintf($text_apple_domain_file_path, '<code>' . $apple_domain_status['path'] . '</code>'); ?>
+                        </small>
+                      </div>
+                    <?php } elseif ($apple_domain_status['present'] && $apple_domain_status['reachable'] === '0') { ?>
+                      <div class="alert alert-warning" style="margin-bottom: 0;">
+                        <i class="fa fa-exclamation-triangle"></i> <?php echo $text_apple_domain_file_unreachable; ?>
+                        <small class="text-muted" style="display: block; margin-top: 3px;">
+                          <?php echo sprintf($text_apple_domain_file_path, '<code>' . $apple_domain_status['path'] . '</code>'); ?>
+                        </small>
+                      </div>
+                    <?php } else { ?>
+                      <div class="alert alert-danger" style="margin-bottom: 0;">
+                        <i class="fa fa-times-circle"></i> <?php echo $text_apple_domain_file_missing; ?>
+                        <small class="text-muted" style="display: block; margin-top: 3px;">
+                          <?php echo sprintf($text_apple_domain_file_path, '<code>' . $apple_domain_status['path'] . '</code>'); ?>
+                        </small>
+                      </div>
+                    <?php } ?>
+                    <button type="button" class="btn btn-default btn-sm" onclick="refreshAppleDomainFile()" style="margin-top: 8px;">
+                      <i class="fa fa-refresh"></i> <?php echo $button_apple_domain_refresh; ?>
+                    </button>
+                  </div>
                 </div>
               </div>
 
@@ -443,6 +470,42 @@ function createWebhook() {
         error: function(xhr, status, error) {
             alert('Error creating webhook: ' + error);
             location.reload();
+        }
+    });
+}
+
+// Refresh Apple Pay domain-association file (CDN with bundled fallback)
+function refreshAppleDomainFile() {
+    var $status = $('#apple-domain-file-status');
+    $status.find('.alert').replaceWith(
+        '<div class="alert alert-info" style="margin-bottom: 0;">' +
+        '<i class="fa fa-spinner fa-spin"></i> <?php echo $text_apple_domain_file_refreshing; ?>' +
+        '</div>'
+    );
+
+    $.ajax({
+        url: 'index.php?route=extension/payment/paypercut/refreshAppleDomainFile&token=<?php echo $token; ?>',
+        type: 'post',
+        dataType: 'json',
+        success: function(json) {
+            if (json.success) {
+                location.reload();
+            } else {
+                var msg = json.error || 'Failed to refresh Apple Pay verification file';
+                if (json.reason) { msg += ' (reason: ' + json.reason + ')'; }
+                $status.find('.alert').replaceWith(
+                    '<div class="alert alert-danger" style="margin-bottom: 0;">' +
+                    '<i class="fa fa-times-circle"></i> ' + msg +
+                    '</div>'
+                );
+            }
+        },
+        error: function(xhr, status, error) {
+            $status.find('.alert').replaceWith(
+                '<div class="alert alert-danger" style="margin-bottom: 0;">' +
+                '<i class="fa fa-times-circle"></i> Network error: ' + error +
+                '</div>'
+            );
         }
     });
 }

@@ -62,3 +62,12 @@ $_['text_connection_failed'] = 'Połączenie nieudane';
 
 // Button
 $_['button_test_connection'] = 'Testuj Połączenie';
+
+// Apple Pay domain verification file
+$_['text_apple_domain_file_ok'] = 'Plik weryfikacji domeny Apple Pay znajduje się na swoim miejscu.';
+$_['text_apple_domain_file_missing'] = 'Brak pliku weryfikacji domeny Apple Pay. Zapisz formularz lub kliknij Odśwież, aby go utworzyć.';
+$_['text_apple_domain_file_unreachable'] = 'Plik jest na dysku, ale sklep nie zwrócił go przez HTTPS. Zobacz runbook Apple Pay.';
+$_['text_apple_domain_file_path'] = 'Ścieżka: %s';
+$_['text_apple_domain_file_refreshing'] = 'Odświeżanie z PayPerCut CDN...';
+$_['button_apple_domain_refresh'] = 'Odśwież z PayPerCut CDN';
+$_['error_apple_domain_write'] = 'Nie udało się zapisać pliku weryfikacji Apple Pay (ścieżka docelowa: %s). Sprawdź uprawnienia systemu plików dla katalogu głównego OpenCart lub prześlij plik ręcznie.';

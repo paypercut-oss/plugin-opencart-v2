@@ -105,6 +105,8 @@ jobs:
           # Ensure module lives under paypercut/
           zipinfo -1 "$ZIP" | grep -x "upload/" >/dev/null
           zipinfo -1 "$ZIP" | grep -x "install.xml" >/dev/null
+          # Ensure the bundled Apple Pay verification file ships with the release.
+          zipinfo -1 "$ZIP" | grep -x "upload/system/library/paypercut/apple-pay/apple-developer-merchantid-domain-association" >/dev/null
 
       - name: Create GitHub Release + upload ZIP
         uses: softprops/action-gh-release@v2

@@ -62,3 +62,12 @@ $_['text_connection_failed'] = 'Kapcsolat sikertelen';
 
 // Button
 $_['button_test_connection'] = 'Kapcsolat tesztelése';
+
+// Apple Pay domain verification file
+$_['text_apple_domain_file_ok'] = 'Az Apple Pay tartomány-ellenőrző fájl a helyén van.';
+$_['text_apple_domain_file_missing'] = 'Hiányzik az Apple Pay tartomány-ellenőrző fájl. Mentse az űrlapot, vagy kattintson a Frissítés gombra a létrehozásához.';
+$_['text_apple_domain_file_unreachable'] = 'A fájl a lemezen van, de a webáruház nem adta vissza HTTPS-en keresztül. Lásd az Apple Pay runbookot.';
+$_['text_apple_domain_file_path'] = 'Útvonal: %s';
+$_['text_apple_domain_file_refreshing'] = 'Frissítés a PayPerCut CDN-ről...';
+$_['button_apple_domain_refresh'] = 'Frissítés a PayPerCut CDN-ről';
+$_['error_apple_domain_write'] = 'Nem sikerült írni az Apple Pay ellenőrző fájlt (célútvonal: %s). Ellenőrizze az OpenCart webroot fájlrendszer-jogosultságait, vagy töltse fel a fájlt manuálisan.';

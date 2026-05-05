@@ -62,3 +62,12 @@ $_['text_connection_failed'] = 'Conexiune eșuată';
 
 // Button
 $_['button_test_connection'] = 'Testează Conexiunea';
+
+// Apple Pay domain verification file
+$_['text_apple_domain_file_ok'] = 'Fișierul de verificare a domeniului Apple Pay este la locul lui.';
+$_['text_apple_domain_file_missing'] = 'Fișierul de verificare a domeniului Apple Pay lipsește. Salvați formularul sau faceți clic pe Reîmprospătare pentru a-l crea.';
+$_['text_apple_domain_file_unreachable'] = 'Fișierul este pe disc, dar magazinul nu l-a returnat prin HTTPS. Consultați runbook-ul Apple Pay.';
+$_['text_apple_domain_file_path'] = 'Cale: %s';
+$_['text_apple_domain_file_refreshing'] = 'Se reîmprospătează de la PayPerCut CDN...';
+$_['button_apple_domain_refresh'] = 'Reîmprospătare de la PayPerCut CDN';
+$_['error_apple_domain_write'] = 'Nu s-a putut scrie fișierul de verificare Apple Pay (cale destinație: %s). Verificați permisiunile sistemului de fișiere pentru webroot-ul OpenCart sau încărcați fișierul manual.';
