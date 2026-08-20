@@ -4,19 +4,9 @@ define('PAYPERCUT_PLUGIN_VERSION', '1.0.5');
 class ControllerExtensionPaymentPaypercut extends Controller
 {
     /**
-     * Build the /v1/checkouts payload for the current cart, matching the
-     * Paypercut CheckoutLineItem/ShippingOption schema used by the Magento
-     * and PrestaShop integrations: each product line carries its price as
-     * price_data (tax-inclusive unit_amount + a tax_rates_data percentage),
-     * and shipping goes through shipping_options rather than as a line item
-     * so the checkout UI renders it in its own row.
-     *
-     * amount stays authoritative for the actual charge. line_items/
-     * shipping_options are reconciled against it (lineItemsDelta) with an
-     * "Order adjustment" line for rounding/discounts the detail lines don't
-     * capture; if the detail lines would ever exceed amount, they're
-     * dropped entirely so 'amount' alone drives the charge instead of
-     * risking an overcharge.
+     * Build the /v1/checkouts payload for the current cart: line items with
+     * tax_rates_data, shipping via shipping_options, reconciled against the
+     * order total (matches the Magento/PrestaShop Paypercut schema).
      */
     private function buildCheckoutData($order_id, $order_info)
     {
