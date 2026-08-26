@@ -1,0 +1,27 @@
+name: Tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '7.4'
+
+      - name: Lint every PHP file
+        run: find upload tests -name '*.php' -print0 | xargs -0 -n1 php -l
+
+      - name: Lint every template
+        run: find upload -name '*.tpl' -print0 | xargs -0 -n1 php -l
+
+      - name: Telemetry tests
+        run: php tests/telemetry_test.php
