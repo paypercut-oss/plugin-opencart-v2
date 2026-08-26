@@ -40,7 +40,11 @@ class PaypercutSentLog
             $entries = array_slice($entries, -self::MAX_ENTRIES);
         }
 
-        while (count($entries) > 1 && self::bytes($entries) > self::MAX_BYTES) {
+        $sizes = PaypercutEventQueue::sizes($entries);
+        $bytes = PaypercutEventQueue::total($sizes);
+
+        while (count($entries) > 1 && $bytes > self::MAX_BYTES) {
+            $bytes -= array_shift($sizes) + 1;
             array_shift($entries);
         }
 
@@ -57,10 +61,4 @@ class PaypercutSentLog
         PaypercutTelemetryStore::delete(self::KEY);
     }
 
-    private static function bytes($entries)
-    {
-        $json = json_encode($entries);
-
-        return is_string($json) ? strlen($json) : 0;
-    }
 }

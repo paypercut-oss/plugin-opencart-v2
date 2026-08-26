@@ -113,7 +113,7 @@ $_['text_telemetry_disclosure_heading'] = 'What is shared';
 $_['text_telemetry_disclosure_shared'] = 'Extension, OpenCart, PHP and theme versions; the extensions installed on this store and their versions; how this store has the Paypercut extension configured (which checkout mode is selected and which options are switched on - never the values of your credentials); a record of each checkout, refund and payment notification the extension handled and whether it succeeded, identified by OpenCart order number and Paypercut payment reference; when something fails, the error message, the file and line it came from, and which extension or theme raised it; and when the session started and stopped.';
 $_['text_telemetry_disclosure_not_shared_label'] = 'Not shared:';
 $_['text_telemetry_disclosure_not_shared'] = 'customer names, email addresses, billing or shipping addresses, order totals, line items, payment card data, the reason text you type when issuing a refund, or any API key, webhook secret or password.';
-$_['text_telemetry_disclosure_key'] = 'Your API key is never sent to the telemetry service. It is used once, over HTTPS, to obtain a short-lived diagnostic token from api.paypercut.io.';
+$_['text_telemetry_disclosure_key'] = 'Your API key is never sent to the telemetry service. It is used once, over HTTPS, to obtain a short-lived diagnostic token from %s.';
 $_['text_telemetry_disclosure_retention'] = 'Paypercut keeps this diagnostic data for 30 days.';
 
 // Consent modal

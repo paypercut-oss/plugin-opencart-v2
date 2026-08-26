@@ -48,9 +48,15 @@ class PaypercutFlusher
             return false;
         }
 
+        // Throwable as well as Exception: on PHP 7 an Error is neither, and
+        // an unreleased lock blocks every flush for its full TTL.
         try {
             $delivered = $this->deliver($record);
         } catch (Exception $e) {
+            PaypercutTelemetrySession::releaseFlushLock();
+
+            throw $e;
+        } catch (Throwable $e) {
             PaypercutTelemetrySession::releaseFlushLock();
 
             throw $e;

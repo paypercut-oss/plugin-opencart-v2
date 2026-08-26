@@ -32,7 +32,8 @@ exactly like a forged token.
 | `production` (default) | `https://api.paypercut.io/` | `https://telemetry.paypercut.io/` |
 | `stage` | `https://api.stage.paypercut.net/` | `https://telemetry.stage.paypercut.net/` |
 | `dev` | `https://api.dev.paypercut.net/` | `https://telemetry.dev.paypercut.net/` |
-| unset / unknown | `https://api.paypercut.io/` (fallback) | **`''` — no session** |
+| unset (never saved) | `https://api.paypercut.io/` | `https://telemetry.paypercut.io/` |
+| set but unknown | `https://api.paypercut.io/` (fallback) | **`''` — no session** |
 
 The payment API falls back to production so stores that predate the setting keep
 working. The edge deliberately does **not** fall back: an unknown environment

@@ -126,7 +126,9 @@ class PaypercutEvent
      */
     public static function failure($name, $code, $attrs = array(), $exception = null)
     {
-        $event = new self($name, self::cleanAttrs($attrs));
+        // origin/origin_plugin are merged in below and have to fit inside the
+        // cap, or MAX_ATTRS is a claim rather than a bound.
+        $event = new self($name, self::cleanAttrs($attrs, $exception instanceof Exception ? self::MAX_ATTRS - 2 : self::MAX_ATTRS));
 
         $code = self::text((string)$code);
         $event->error = array('code' => $code !== '' ? $code : 'unknown');
@@ -157,7 +159,9 @@ class PaypercutEvent
     public static function apiFailure($name, $status, $body = array(), $attrs = array())
     {
         $status = (int)$status;
-        $event = new self($name, self::cleanAttrs($attrs));
+
+        // api_code, api_param, trace_id and http_status are merged in below.
+        $event = new self($name, self::cleanAttrs($attrs, self::MAX_ATTRS - 4));
 
         $event->error = array('code' => 'http_' . $status);
 
@@ -502,6 +506,7 @@ class PaypercutEvent
         $total = count($plugins);
         $chunks = array_chunk($plugins, self::MAX_ATTRS - 2, true);
         $events = array();
+        $position = 0;
 
         foreach ($chunks as $index => $chunk) {
             $fields = array(
@@ -510,11 +515,22 @@ class PaypercutEvent
             );
 
             foreach ($chunk as $code => $version) {
+                $position++;
                 $key = self::text((string)$code);
 
-                if ($key !== '') {
-                    $fields[$key] = self::text((string)$version);
+                if ($key === '') {
+                    continue;
                 }
+
+                // An extension code is data, not a field name we chose: stock
+                // codes like payment.authorizenet_aim match the denied-key
+                // pattern, which would bin the whole inventory chunk.
+                if (self::isDeniedKey($key)) {
+                    $fields['extension_' . $position] = self::text($key . ' ' . (string)$version);
+                    continue;
+                }
+
+                $fields[$key] = self::text((string)$version);
             }
 
             $events[] = new self('environment.plugins', $fields);
@@ -564,16 +580,17 @@ class PaypercutEvent
      * are clamped and control-stripped; anything else is not a scalar
      * diagnostic and is dropped.
      */
-    private static function cleanAttrs($attrs)
+    private static function cleanAttrs($attrs, $limit = null)
     {
         $fields = array();
+        $limit = $limit === null ? self::MAX_ATTRS : max(0, (int)$limit);
 
         if (!is_array($attrs)) {
             return $fields;
         }
 
         foreach ($attrs as $key => $value) {
-            if (count($fields) >= self::MAX_ATTRS) {
+            if (count($fields) >= $limit) {
                 break;
             }
 

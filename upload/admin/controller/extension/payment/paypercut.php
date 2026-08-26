@@ -1022,12 +1022,21 @@ class ControllerExtensionPaymentPaypercut extends Controller
      */
     private function debugSessionDisclosure()
     {
+        require_once DIR_SYSTEM . 'library/paypercut/environment.php';
+
+        // The host the key is actually exchanged at, which is not
+        // api.paypercut.io on a store connected to stage or dev.
+        $mint_host = (string)parse_url(
+            PaypercutEnvironment::apiBaseUri(PaypercutEnvironment::stored($this->config->get('paypercut_environment'))),
+            PHP_URL_HOST
+        );
+
         return '<div class="well well-sm">'
             . '<p><strong>' . $this->language->get('text_telemetry_disclosure_heading') . '</strong></p>'
             . '<p>' . $this->language->get('text_telemetry_disclosure_shared') . '</p>'
             . '<p><strong>' . $this->language->get('text_telemetry_disclosure_not_shared_label') . '</strong> '
             . $this->language->get('text_telemetry_disclosure_not_shared') . '</p>'
-            . '<p>' . $this->language->get('text_telemetry_disclosure_key') . '</p>'
+            . '<p>' . sprintf($this->language->get('text_telemetry_disclosure_key'), htmlspecialchars($mint_host, ENT_QUOTES, 'UTF-8')) . '</p>'
             . '<p>' . $this->language->get('text_telemetry_disclosure_retention') . '</p>'
             . '</div>';
     }
@@ -1173,9 +1182,15 @@ class ControllerExtensionPaymentPaypercut extends Controller
         // Built inside the guard and emitted outside it: respondJson() ends the
         // request, and a response sent before the release would strand the
         // start lock for its full TTL and block the merchant's next attempt.
+        // Throwable as well as Exception: on PHP 7 an Error is neither, and an
+        // unreleased lock refuses the merchant's next attempt for a minute.
         try {
             $result = $this->mintDebugSession();
         } catch (Exception $e) {
+            PaypercutTelemetrySession::releaseStartLock();
+
+            throw $e;
+        } catch (Throwable $e) {
             PaypercutTelemetrySession::releaseStartLock();
 
             throw $e;

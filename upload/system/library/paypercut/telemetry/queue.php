@@ -85,9 +85,15 @@ class PaypercutEventQueue
             $envelopes = array_slice($envelopes, -PaypercutTelemetrySession::MAX_QUEUE_EVENTS);
         }
 
+        // Sized once per envelope and then adjusted: re-encoding the whole
+        // queue on every iteration runs on the storefront shutdown path.
+        $sizes = self::sizes($envelopes);
+        $bytes = self::total($sizes);
+
         // Stop at one, mirroring splitBatch(): a single oversized envelope must
         // not empty the queue behind it.
-        while (count($envelopes) > 1 && self::bytes($envelopes) > PaypercutTelemetrySession::MAX_QUEUE_BYTES) {
+        while (count($envelopes) > 1 && $bytes > PaypercutTelemetrySession::MAX_QUEUE_BYTES) {
+            $bytes -= array_shift($sizes) + 1;
             array_shift($envelopes);
             $dropped++;
         }
@@ -109,19 +115,22 @@ class PaypercutEventQueue
     public static function splitBatch($envelopes, $max_bytes, $max_events)
     {
         $batch = array();
+        $bytes = 2;
 
         foreach ($envelopes as $envelope) {
             if (count($batch) >= $max_events) {
                 break;
             }
 
-            $candidate = array_merge($batch, array($envelope));
+            // The envelope's own bytes plus the comma joining it to the last.
+            $size = self::envelopeBytes($envelope) + (empty($batch) ? 0 : 1);
 
-            if (!empty($batch) && self::bytes($candidate) > $max_bytes) {
+            if (!empty($batch) && $bytes + $size > $max_bytes) {
                 break;
             }
 
-            $batch = $candidate;
+            $batch[] = $envelope;
+            $bytes += $size;
         }
 
         return array(
@@ -189,6 +198,43 @@ class PaypercutEventQueue
         $json = json_encode($envelopes);
 
         return is_string($json) ? strlen($json) : 0;
+    }
+
+    /**
+     * The serialised size of one envelope.
+     */
+    public static function envelopeBytes($envelope)
+    {
+        $json = json_encode($envelope);
+
+        return is_string($json) ? strlen($json) : 0;
+    }
+
+    /**
+     * Per-envelope sizes, in order.
+     */
+    public static function sizes($envelopes)
+    {
+        $sizes = array();
+
+        foreach ($envelopes as $envelope) {
+            $sizes[] = self::envelopeBytes($envelope);
+        }
+
+        return $sizes;
+    }
+
+    /**
+     * What json_encode() would report for a list of envelopes of these sizes:
+     * the brackets, the members, and one comma between each pair.
+     */
+    public static function total($sizes)
+    {
+        if (empty($sizes)) {
+            return 2;
+        }
+
+        return array_sum($sizes) + count($sizes) + 1;
     }
 
     private static function read($key)

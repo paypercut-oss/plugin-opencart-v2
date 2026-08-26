@@ -391,7 +391,7 @@
                    data-token="<?php echo $token; ?>"
                    data-poll-seconds="<?php echo (int)$telemetry_poll_seconds; ?>"
                    data-now="<?php echo (int)$telemetry_now; ?>"
-                   data-state="<?php echo $telemetry_state['state']; ?>"
+                   data-state="<?php echo htmlspecialchars($telemetry_state['state'], ENT_QUOTES, 'UTF-8'); ?>"
                    data-expires-at="<?php echo (int)$telemetry_state['expires_at']; ?>">
 
                 <h4><?php echo $heading_telemetry; ?></h4>
@@ -412,11 +412,11 @@
                     <?php echo sprintf($text_telemetry_running, '<span data-paypercut-countdown>-</span>'); ?>
                   </strong></p>
                   <p class="help-block">
-                    <?php echo sprintf($text_telemetry_started_by, '<span data-paypercut-started-by>' . $telemetry_state['started_by_name'] . '</span>', '<span data-paypercut-ends-at>' . $telemetry_ends_at . '</span>'); ?>
+                    <?php echo sprintf($text_telemetry_started_by, '<span data-paypercut-started-by>' . htmlspecialchars($telemetry_state['started_by_name'], ENT_QUOTES, 'UTF-8') . '</span>', '<span data-paypercut-ends-at>' . $telemetry_ends_at . '</span>'); ?>
                   </p>
                   <p>
                     <?php echo $text_telemetry_session_id; ?>
-                    <code data-paypercut-session-id><?php echo $telemetry_state['session_id']; ?></code>
+                    <code data-paypercut-session-id><?php echo htmlspecialchars($telemetry_state['session_id'], ENT_QUOTES, 'UTF-8'); ?></code>
                     <button type="button" class="btn btn-link btn-xs" data-paypercut-copy><?php echo $button_telemetry_copy; ?></button>
                   </p>
                   <p class="help-block">
@@ -428,7 +428,7 @@
                 <div data-paypercut-state="ended" <?php echo $telemetry_state['state'] == 'ended' ? '' : 'style="display:none;"'; ?>>
                   <p><strong><?php echo $text_telemetry_ended; ?></strong> <?php echo $text_telemetry_ended_help; ?></p>
                   <p>
-                    <?php echo sprintf($text_telemetry_last_session_id, '<code data-paypercut-session-id>' . $telemetry_state['session_id'] . '</code>'); ?>
+                    <?php echo sprintf($text_telemetry_last_session_id, '<code data-paypercut-session-id>' . htmlspecialchars($telemetry_state['session_id'], ENT_QUOTES, 'UTF-8') . '</code>'); ?>
                     <button type="button" class="btn btn-link btn-xs" data-paypercut-copy><?php echo $button_telemetry_copy; ?></button>
                   </p>
                   <?php if ($telemetry_start_enabled) { ?>
@@ -437,10 +437,10 @@
                 </div>
 
                 <div data-paypercut-state="failed" <?php echo $telemetry_state['state'] == 'failed' ? '' : 'style="display:none;"'; ?>>
-                  <div class="alert alert-danger" data-paypercut-failed-message><?php echo $telemetry_state['message']; ?></div>
+                  <div class="alert alert-danger" data-paypercut-failed-message><?php echo htmlspecialchars($telemetry_state['message'], ENT_QUOTES, 'UTF-8'); ?></div>
                   <p data-paypercut-reference <?php echo $telemetry_state['trace_id'] == '' ? 'style="display:none;"' : ''; ?>>
                     <?php echo $text_telemetry_reference; ?>
-                    <code data-paypercut-trace-id><?php echo $telemetry_state['trace_id']; ?></code>
+                    <code data-paypercut-trace-id><?php echo htmlspecialchars($telemetry_state['trace_id'], ENT_QUOTES, 'UTF-8'); ?></code>
                     <button type="button" class="btn btn-link btn-xs" data-paypercut-copy><?php echo $button_telemetry_copy; ?></button>
                   </p>
                   <?php if ($telemetry_start_enabled) { ?>

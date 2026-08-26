@@ -37,9 +37,12 @@ host — never resolve them separately:
 | `stage` | `https://api.stage.paypercut.net/` | `https://telemetry.stage.paypercut.net/` |
 | `dev` | `https://api.dev.paypercut.net/` | `https://telemetry.dev.paypercut.net/` |
 
-An unset or unknown value falls back to production for the API (so stores that
-predate the setting keep working) and yields **no** telemetry session at all.
-Both bases are accepted only on an `https` `paypercut.io` / `paypercut.net` host.
+An **unset** value is a store that predates the setting: it reads as
+`production`, which is where its payments have always gone. A value that **is**
+set but unrecognised falls back to production for the API (so checkout keeps
+working) and yields **no** telemetry session at all. Both bases are accepted only
+on an `https` `paypercut.io` / `paypercut.net` host, and there is no override
+that can move one host without the other.
 
 ## Debug sessions
 

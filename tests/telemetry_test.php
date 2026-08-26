@@ -264,6 +264,66 @@ same(
 $started = PaypercutEvent::sessionStarted('dbg_abc123', 'production', 1787250271)->fields();
 same(array('session_id', 'environment', 'expires_at'), array_keys($started), 'session.started carries exactly three fields');
 
+// The inventory's keys are stock extension CODES, not field names this
+// extension chose - and `payment.authorizenet_aim` matches the denied-key
+// pattern, which used to bin the one event a conflict gets named in.
+$inventory = array(
+    'payment.authorizenet_aim' => '1.0',
+    'payment.authorizenet_sim' => '1.0',
+    'payment.paypercut' => '1.0.5',
+    'shipping.flat' => '1.0',
+    'total.shipping' => '1.0'
+);
+
+$chunks = PaypercutEvent::environmentPlugins($inventory);
+same(1, count($chunks), 'a small inventory is one chunk');
+
+$chunk = $chunks[0]->envelope(0);
+ok(!PaypercutEvent::isEnvelopeDenied($chunk), 'the inventory chunk survives the deny assertion');
+same(count($inventory) + 2, count($chunk['attrs']), 'no extension is dropped from the chunk');
+
+$rendered = json_encode($chunk['attrs']);
+
+foreach (array_keys($inventory) as $code) {
+    ok(strpos($rendered, $code) !== false, 'the inventory still names ' . $code);
+}
+
+$many = array();
+
+for ($i = 0; $i < 70; $i++) {
+    $many['payment.ext_' . $i] = '1.0';
+}
+
+$listed = 0;
+
+foreach (PaypercutEvent::environmentPlugins($many) as $event) {
+    $listed += count($event->fields()) - 2;
+}
+
+same(70, $listed, 'every extension appears exactly once across the chunks');
+
+// MAX_ATTRS is a bound, not a claim: the fields merged in after cleanAttrs()
+// have to fit inside it too.
+$crowded = array();
+
+for ($i = 0; $i < 40; $i++) {
+    $crowded['field_' . $i] = $i;
+}
+
+ok(
+    count(PaypercutEvent::failure('x', 'code', $crowded, new Exception('boom'))->fields()) <= PaypercutEvent::MAX_ATTRS,
+    'failure() with an exception stays inside MAX_ATTRS'
+);
+ok(
+    count(PaypercutEvent::apiFailure(
+        'x',
+        401,
+        array('error' => array('code' => 'c', 'param' => 'p'), 'trace_id' => 't'),
+        $crowded
+    )->fields()) <= PaypercutEvent::MAX_ATTRS,
+    'apiFailure() stays inside MAX_ATTRS'
+);
+
 // ---------------------------------------------------------------------------
 // Our text yes, upstream text no.
 // ---------------------------------------------------------------------------
