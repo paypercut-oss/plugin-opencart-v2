@@ -234,7 +234,7 @@ class PaypercutTelemetrySession
 
         return array(
             'secret' => (string)$config->get('paypercut_api_key'),
-            'environment' => PaypercutEnvironment::normalize($config->get('paypercut_environment'))
+            'environment' => PaypercutEnvironment::stored($config->get('paypercut_environment'))
         );
     }
 

@@ -78,7 +78,42 @@ foreach (array(
     same('', PaypercutEnvironment::allowedPaypercutBase($rejected), 'rejects ' . var_export($rejected, true));
 }
 
+// One value, one PAIR of hosts: nothing may retarget the edge on its own, or a
+// token minted on one environment meets another environment's edge and 401s.
+foreach (array('production', 'stage', 'dev') as $environment) {
+    same(
+        str_replace('api', 'telemetry', PaypercutEnvironment::apiBaseUri($environment)),
+        PaypercutEnvironment::telemetryBaseUri($environment),
+        'both hosts name the same environment for ' . $environment
+    );
+}
+
+define('PAYPERCUT_TELEMETRY_BASE_URI', 'https://telemetry.stage.paypercut.net/');
+
+same(
+    'https://telemetry.dev.paypercut.net/',
+    PaypercutEnvironment::telemetryBaseUri('dev'),
+    'no constant can retarget the edge away from the mint host'
+);
+
+// A store that predates the setting is on production - which is where its
+// payments have always gone - but a value that IS set and unknown is not.
+same('production', PaypercutEnvironment::stored(''), 'an unset environment is production');
+same('production', PaypercutEnvironment::stored(null), 'a null environment is production');
+same('dev', PaypercutEnvironment::stored('dev'), 'a known environment is itself');
+same('', PaypercutEnvironment::stored('sandbox'), 'an unknown environment is not guessed at');
+
 same('https://api.paypercut.io/', PaypercutEnvironment::allowedPaypercutBase('https://api.paypercut.io'), 'adds a trailing slash');
+same(
+    'https://telemetry.paypercut.io/x/',
+    PaypercutEnvironment::allowedPaypercutBase('https://telemetry.paypercut.io/x?a=b'),
+    'drops a query string that would swallow the endpoint path'
+);
+same(
+    'https://telemetry.paypercut.io/',
+    PaypercutEnvironment::allowedPaypercutBase('https://user:pass@telemetry.paypercut.io/#f'),
+    'drops credentials and a fragment'
+);
 same('https://telemetry.dev.paypercut.net/', PaypercutEnvironment::allowedPaypercutBase('https://telemetry.dev.paypercut.net/'), 'accepts a paypercut.net subdomain');
 
 // ---------------------------------------------------------------------------

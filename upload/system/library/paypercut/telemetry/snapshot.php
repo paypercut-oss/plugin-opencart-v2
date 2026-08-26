@@ -36,7 +36,7 @@ class PaypercutEnvironmentSnapshot
             'statement_descriptor_set' => (string)$config->get('paypercut_statement_descriptor') !== '',
             'logging_enabled' => (bool)$config->get('paypercut_logging'),
             'card_enabled' => (bool)$config->get('paypercut_status'),
-            'connection_environment' => PaypercutEnvironment::normalize($config->get('paypercut_environment')),
+            'connection_environment' => PaypercutEnvironment::stored($config->get('paypercut_environment')),
             'api_key_mode' => self::apiKeyMode($api_key),
             // Presence booleans derived from secret-bearing settings: the value
             // never travels, only whether one exists.

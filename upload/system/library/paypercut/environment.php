@@ -22,6 +22,23 @@ class PaypercutEnvironment
     }
 
     /**
+     * The environment a store is actually on, from its stored setting.
+     *
+     * An unset value is a store that predates the setting: it is on production,
+     * which is where apiBaseUri() has always sent its payments and what the
+     * settings form displays. A value that IS set but unrecognised is not
+     * production and must not be guessed at - it yields no debug session.
+     */
+    public static function stored($environment)
+    {
+        if (!is_string($environment) || trim($environment) === '') {
+            return self::DEFAULT_ENVIRONMENT;
+        }
+
+        return self::normalize($environment);
+    }
+
+    /**
      * Reduce a stored value to a known environment, or '' when it is neither.
      */
     public static function normalize($environment)
@@ -85,13 +102,10 @@ class PaypercutEnvironment
             return '';
         }
 
-        // Ignored on production: a constant left in config.php after debugging
-        // must not retarget a live store's telemetry, and the mint host - which
-        // is resolved from the same value below - would not follow it anyway.
-        if ($environment !== 'production' && defined('PAYPERCUT_TELEMETRY_BASE_URI')) {
-            return self::allowedPaypercutBase(constant('PAYPERCUT_TELEMETRY_BASE_URI'));
-        }
-
+        // There is deliberately no host override here. A constant naming the
+        // edge directly can point it at an environment the mint host does not
+        // follow, and a token minted for one environment is rejected by every
+        // other environment's edge.
         $map = array(
             'dev' => 'https://telemetry.dev.paypercut.net/',
             'stage' => 'https://telemetry.stage.paypercut.net/',
@@ -125,6 +139,12 @@ class PaypercutEnvironment
             return '';
         }
 
-        return rtrim($url, '/') . '/';
+        // Rebuilt rather than trimmed: a query string or fragment left on the
+        // base would swallow the endpoint path appended to it, and any
+        // user:password@ in front of the host is not ours to forward.
+        $port = isset($parts['port']) ? ':' . (int)$parts['port'] : '';
+        $path = isset($parts['path']) ? rtrim($parts['path'], '/') : '';
+
+        return 'https://' . $host . $port . $path . '/';
     }
 }

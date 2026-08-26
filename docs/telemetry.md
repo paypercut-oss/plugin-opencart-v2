@@ -38,11 +38,18 @@ The payment API falls back to production so stores that predate the setting keep
 working. The edge deliberately does **not** fall back: an unknown environment
 must yield no session rather than a confusing one.
 
+`unset` means a store that predates the setting: `PaypercutEnvironment::stored()`
+reads it as `production`, which is where its payments have always gone and what
+the settings form shows. A value that **is** set but unrecognised is not guessed
+at — it yields no session.
+
 Both bases pass `PaypercutEnvironment::allowedPaypercutBase()`, which accepts
-only `https` on a `paypercut.net` / `paypercut.io` host. The store's API key
+only `https` on a `paypercut.net` / `paypercut.io` host and rebuilds the URL from
+its parts, dropping any query, fragment or `user:password@`. The store's API key
 travels on the mint request, so the destination is validated rather than trusted.
-`config.php` may define `PAYPERCUT_TELEMETRY_BASE_URI` to retarget the edge, and
-that override is **ignored when the environment is `production`**.
+There is **no host override**: a constant naming the edge directly could point it
+at an environment the mint host does not follow, and the two hosts must always be
+resolved from the one stored value.
 
 | Piece | Role |
 |---|---|

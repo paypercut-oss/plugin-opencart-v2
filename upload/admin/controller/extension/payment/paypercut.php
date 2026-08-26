@@ -173,9 +173,10 @@ class ControllerExtensionPaymentPaypercut extends Controller
             ? $this->request->post['paypercut_environment']
             : $this->config->get('paypercut_environment');
 
-        $environment = PaypercutEnvironment::normalize($environment);
-
-        $data['paypercut_environment'] = $environment !== '' ? $environment : PaypercutEnvironment::DEFAULT_ENVIRONMENT;
+        // stored(), not normalize(): the form must show the environment the
+        // debug session will actually resolve, or a store that never re-saved
+        // reads `production` here and is refused a session.
+        $data['paypercut_environment'] = PaypercutEnvironment::stored($environment);
         $data['paypercut_environments'] = PaypercutEnvironment::all();
         $data['paypercut_api_base'] = PaypercutEnvironment::apiBaseUri($data['paypercut_environment']);
         $data['entry_environment'] = $this->language->get('entry_environment');
@@ -312,7 +313,7 @@ class ControllerExtensionPaymentPaypercut extends Controller
             $this->report(PaypercutEvent::of('connection.validated', array(
                 'source' => 'settings_save',
                 'is_bnpl' => false,
-                'environment' => PaypercutEnvironment::normalize(
+                'environment' => PaypercutEnvironment::stored(
                     isset($this->request->post['paypercut_environment']) ? $this->request->post['paypercut_environment'] : ''
                 ),
                 'api_key_mode' => $this->detectApiKeyMode($this->request->post['paypercut_api_key'])
@@ -847,7 +848,7 @@ class ControllerExtensionPaymentPaypercut extends Controller
                 curl_close($ch);
 
                 $mode = $this->detectApiKeyMode($api_key);
-                $environment = PaypercutEnvironment::normalize($this->config->get('paypercut_environment'));
+                $environment = PaypercutEnvironment::stored($this->config->get('paypercut_environment'));
 
                 if ($http_code == 200) {
                     $result = json_decode($response, true);
@@ -1093,7 +1094,7 @@ class ControllerExtensionPaymentPaypercut extends Controller
         require_once DIR_SYSTEM . 'library/paypercut/environment.php';
 
         $api_key = isset($this->request->post['paypercut_api_key']) ? (string)$this->request->post['paypercut_api_key'] : '';
-        $environment = PaypercutEnvironment::normalize(
+        $environment = PaypercutEnvironment::stored(
             isset($this->request->post['paypercut_environment']) ? $this->request->post['paypercut_environment'] : ''
         );
 
