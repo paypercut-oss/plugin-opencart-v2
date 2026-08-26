@@ -505,7 +505,7 @@ class ControllerExtensionPaymentPaypercut extends Controller
                 array(
                     'order_status' => (string)$order_status_id,
                     'session_matched' => true,
-                    'verified_status' => (string)$checkout_data['status']
+                    'verified_status' => PaypercutEvent::identifier($checkout_data['status'])
                 )
             )->about(array(
                 'payment_id' => (string)$payment_id,
@@ -1018,7 +1018,7 @@ class ControllerExtensionPaymentPaypercut extends Controller
                 array(
                     'order_status' => (string)$order_status_id,
                     'session_matched' => true,
-                    'verified_status' => (string)$checkout_data['status']
+                    'verified_status' => PaypercutEvent::identifier($checkout_data['status'])
                 )
             )->about(array(
                 'payment_intent_id' => (string)$payment_intent,

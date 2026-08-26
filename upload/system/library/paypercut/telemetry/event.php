@@ -119,9 +119,10 @@ class PaypercutEvent
      * Report a failure, under whichever event name describes where it happened.
      *
      * The named constructors fix their attributes here in this file. This one
-     * cannot: a code and a message come from the failing call site. The bound
-     * is enforced instead of declared - $code is a slug, $message is clamped
-     * and screened, and a stack carries file and line only.
+     * cannot: the code comes from the failing call site. The bound is enforced
+     * instead of declared - $code is a slug, an exception contributes only its
+     * type and a file/line stack, and prose reaches the wire only when a call
+     * site authors it through ->because().
      */
     public static function failure($name, $code, $attrs = array(), $exception = null)
     {
@@ -131,8 +132,12 @@ class PaypercutEvent
         $event->error = array('code' => $code !== '' ? $code : 'unknown');
 
         if ($exception instanceof Exception) {
+            // Never the exception's own message. OpenCart's database layer puts
+            // the failing SQL and the connection's 'user'@'host' into it, and
+            // the API quotes submitted input back - a rejected key arrives
+            // inside the prose. The type, the stack, `api_code`/`trace_id` and
+            // an authored ->because() carry the diagnosis instead.
             $event->error['type'] = self::shortClassName($exception);
-            $event->error['message'] = self::text($exception->getMessage());
             $event->error['stack'] = self::stack($exception);
 
             $event->fields = array_merge(self::origin(self::frameFiles($exception)), $event->fields);
@@ -238,11 +243,23 @@ class PaypercutEvent
             $message = rtrim(substr($message, 0, $trace));
         }
 
+        // OpenCart's database layer reports a failure as one line carrying the
+        // whole statement after a <br />, so keep the first line only.
+        $message = rtrim(substr($message, 0, strcspn($message, "\r\n")));
+        $tag = strpos($message, '<br');
+
+        if ($tag !== false) {
+            $message = rtrim(substr($message, 0, $tag));
+        }
+
         foreach (self::roots() as $prefix) {
             $message = str_replace(rtrim($prefix, '/') . '/', '', $message);
         }
 
-        return $message;
+        // "Access denied for user 'store'@'db.internal'" names the store's
+        // database account and an internal host; an address is never shared
+        // either. Neither adds anything the error code does not already say.
+        return (string)preg_replace('/[^\s@]{1,64}@[^\s@]{1,64}/', '[redacted]', $message);
     }
 
     /**

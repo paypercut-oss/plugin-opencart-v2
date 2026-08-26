@@ -261,6 +261,32 @@ same(401, $envelope['attrs']['http_status'], 'api_failure keeps http_status');
 $authored = PaypercutEvent::failure('webhook.registration_failed', 'rejected')->because('threw RuntimeException');
 same('threw RuntimeException', $authored->envelope(0)['error']['message'], 'because() keeps an authored message');
 
+// An exception's own message never travels: OpenCart's database layer puts the
+// failing statement and the connection account into it.
+$thrown = PaypercutEvent::failure(
+    'checkout.return.unverifiable',
+    'lookup_failed',
+    array(),
+    new Exception("Error: Access denied for user 'store'@'db.internal'<br />SELECT * FROM oc_order")
+)->envelope(0);
+
+ok(!isset($thrown['error']['message']), 'failure() never sends the exception message');
+same('Exception', $thrown['error']['type'], 'failure() keeps the exception type');
+ok(isset($thrown['error']['stack']), 'failure() keeps a file:line stack');
+
+// The fatal handler has no exception to name, so its message is scrubbed.
+$fatal = PaypercutEvent::fatal(
+    "Error: Access denied for user 'store'@'db.internal'<br />Error No: 1045<br />SELECT * FROM oc_customer\nStack trace:\n#0 {main}",
+    '/var/www/store/system/library/db/mysqli.php',
+    40,
+    E_USER_ERROR
+)->envelope(0);
+
+ok(strpos($fatal['error']['message'], 'SELECT') === false, 'php.fatal drops the statement');
+ok(strpos($fatal['error']['message'], 'db.internal') === false, 'php.fatal drops the database host');
+ok(strpos($fatal['error']['message'], 'store') === false, 'php.fatal drops the database account');
+ok(strpos($fatal['error']['message'], 'Access denied') !== false, 'php.fatal keeps the diagnosis');
+
 // ---------------------------------------------------------------------------
 // String bounding.
 // ---------------------------------------------------------------------------

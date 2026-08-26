@@ -216,17 +216,27 @@ Four things enforce that, in order:
    reverse — pulling keys from a settings array is how a credential ends up on
    the wire.
 2. **The deny assertion** in `PaypercutEventQueue::append()`, the one funnel every
-   producer goes through. It screens `attrs` **and** `error` (including
-   `error.stack`), two levels deep, against denied key names, denied value
-   shapes, a Luhn PAN check, and the store's **actual** credentials. A tripped
+   producer goes through. It screens the **whole envelope** exactly as it will be
+   serialised — `attrs`, `error` (including `error.stack`) and the top-level
+   correlation ids alike — two levels deep, against denied key names, denied
+   value shapes, a Luhn PAN check, and the store's **actual** credentials.
+   Screening a named subset is what let a card number ride in `order_ref`, so
+   `isEnvelopeDenied()` takes the envelope whole and any field added to
+   `envelope()` is covered by construction. The literal-secret comparison also
+   catches a credential the 256-byte clamp cut part-way through. A tripped
    assertion **drops the whole event**, not the offending field: an event
    assembled wrongly cannot be trusted in its other parts either. Only the event
    *name* is audit-logged.
-3. **"Our text yes, upstream text no."** `PaypercutEvent::apiFailure()` never reads
-   the platform's `message` — the platform quotes submitted input back, so a
-   rejected key arrives inside it. `api_code`, `api_param`, `trace_id` and
-   `error.type` carry the diagnosis. A message this extension authored
-   (`because('threw RuntimeException')`) is the diagnosis and stays.
+3. **"Our text yes, upstream text no."** No exception message ever travels:
+   `PaypercutEvent::failure()` takes an exception's type and `file:line` stack
+   and discards its message, and `apiFailure()` never reads the platform's
+   `message` — OpenCart's database layer puts the failing statement and the
+   connection's `'user'@'host'` in one, and the API quotes submitted input back
+   in the other. `api_code`, `api_param`, `trace_id` and `error.type` carry the
+   diagnosis. A message this extension authored
+   (`because('threw RuntimeException')`) is the diagnosis and stays. `php.fatal`
+   has no exception to name, so its message is trimmed to the first line and
+   anything shaped like an account or address is redacted.
 4. **Bounding.** Strings are clamped to 256 **bytes** (UTF-8 preserved, control
    characters stripped); identifier-shaped fields are dropped rather than
    mangled; stacks are `file:line` only, at most 8 frames, relative to the
