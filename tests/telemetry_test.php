@@ -128,6 +128,79 @@ ok(
 );
 
 // ---------------------------------------------------------------------------
+// The assertion screens the WHOLE envelope, exactly as it will be sent.
+//
+// Driven by envelope() itself: a field added to the wire shape that escapes
+// the screen fails here rather than shipping. The correlation ids are the case
+// that matters - they are top-level siblings of `attrs`, and on this platform
+// they are fed from upstream API and (unsigned) webhook payloads.
+// ---------------------------------------------------------------------------
+
+$store_secrets = array('ppc_live_realstoresecret', 'whsec_realwebhooksecret');
+
+$maximal = PaypercutEvent::failure(
+    'checkout.return.unverifiable',
+    'lookup_failed',
+    array('api_context' => 'verify'),
+    new Exception('unusable')
+)
+    ->because('threw RuntimeException')
+    ->about(array('payment_intent_id' => 'pi_1', 'payment_id' => 'pay_1', 'order_ref' => 'WC-2026/8891'))
+    ->envelope(1787250271);
+
+ok(!PaypercutEvent::isEnvelopeDenied($maximal, $store_secrets), 'a clean envelope passes the screen');
+ok(count($maximal) >= 7, 'the maximal envelope carries every wire field');
+
+$poisons = array(
+    'a Luhn-valid PAN' => '4111111111111111',
+    'a store API key' => 'ppc_live_realstoresecret',
+    'a key-shaped string' => 'sk_live_SUPERSECRET_ABC123',
+    'a token' => 'eyJhbGciOiJSUzI1NiJ9.payload'
+);
+
+foreach ($maximal as $field => $value) {
+    foreach ($poisons as $label => $poison) {
+        $envelope = $maximal;
+
+        $envelope[$field] = is_array($value)
+            ? array_merge($value, array('planted' => $poison))
+            : $poison;
+
+        ok(
+            PaypercutEvent::isEnvelopeDenied($envelope, $store_secrets),
+            'denies ' . $label . ' in ' . $field
+        );
+    }
+}
+
+// The exact envelope an unauthenticated webhook could steer into about().
+$correlated = PaypercutEvent::of('webhook.received')
+    ->about(array('payment_intent_id' => 'sk_live_SUPERSECRET_ABC123', 'order_ref' => '4111111111111111'))
+    ->envelope(0);
+
+ok(PaypercutEvent::isEnvelopeDenied($correlated), 'denies a credential and a PAN in the correlation ids');
+
+// Clamping runs before the assertion, so a credential starting near the byte
+// cap reaches the wire as a prefix that a whole-secret comparison cannot see.
+$boundary_secret = 'ppc_live_' . str_repeat('z', 40);
+$clamped = PaypercutEvent::of('checkout.session_create_failed', array(
+    'note' => str_repeat('a', 250) . $boundary_secret
+))->envelope(0);
+
+same(256, strlen($clamped['attrs']['note']), 'the value was clamped part-way through the secret');
+ok(
+    PaypercutEvent::isEnvelopeDenied($clamped, array($boundary_secret)),
+    'denies a value clamped part-way through a stored secret'
+);
+ok(
+    !PaypercutEvent::isEnvelopeDenied(
+        PaypercutEvent::of('x', array('note' => str_repeat('a', 300)))->envelope(0),
+        array($boundary_secret)
+    ),
+    'a clamped value with no secret in it still passes'
+);
+
+// ---------------------------------------------------------------------------
 // Named constructors are the boundary: snapshots walk their OWN schema.
 // ---------------------------------------------------------------------------
 

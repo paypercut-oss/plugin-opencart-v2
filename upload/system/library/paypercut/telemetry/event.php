@@ -31,6 +31,12 @@ class PaypercutEvent
     const MAX_STACK_FRAMES = 8;
 
     /**
+     * Shortest tail of a clamped value compared against a credential's opening
+     * bytes. See endsMidSecret().
+     */
+    const MIN_SECRET_FRAGMENT = 4;
+
+    /**
      * Field names that must never appear in an event, whatever their value.
      */
     private static $denied_key_pattern = '/secret|token|password|credential|nonce|auth|_key$/i';
@@ -609,6 +615,21 @@ class PaypercutEvent
     }
 
     /**
+     * Hard deny assertion over a whole envelope, exactly as it will be sent.
+     *
+     * The envelope is screened entire rather than a named subset of it: the
+     * correlation ids `about()` writes are top-level siblings of `attrs` and
+     * are fed from upstream API and webhook payloads, so screening only
+     * `attrs` and `error` let a card number or the store's own API key travel
+     * in `order_ref`, `payment_id` or `payment_intent_id`. Any field added to
+     * envelope() in future is screened by construction.
+     */
+    public static function isEnvelopeDenied($envelope, $secrets = array())
+    {
+        return self::isDenied($envelope, $secrets);
+    }
+
+    /**
      * Hard deny assertion: true when this event must be dropped entirely.
      *
      * A safety net behind the named constructors, not the primary control. It
@@ -623,7 +644,7 @@ class PaypercutEvent
         }
 
         foreach ($fields as $key => $value) {
-            if (preg_match(self::$denied_key_pattern, (string)$key)) {
+            if (self::isDeniedKey($key)) {
                 return true;
             }
 
@@ -654,9 +675,47 @@ class PaypercutEvent
             // credentials is not. This catches a secret whose format we never
             // anticipated, including one a future Paypercut release introduces.
             foreach ($secrets as $secret) {
-                if (is_string($secret) && $secret !== '' && strpos($value, $secret) !== false) {
+                if (!is_string($secret) || $secret === '') {
+                    continue;
+                }
+
+                if (strpos($value, $secret) !== false || self::endsMidSecret($value, $secret)) {
                     return true;
                 }
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Is this a field name that must never appear, whatever its value?
+     */
+    private static function isDeniedKey($key)
+    {
+        return preg_match(self::$denied_key_pattern, (string)$key) === 1;
+    }
+
+    /**
+     * Does this value end part-way through one of the store's credentials?
+     *
+     * text() clamps to MAX_TEXT_BYTES before the assertion ever sees a value,
+     * so a credential that started near the limit survives only as a prefix at
+     * the very end - which a whole-secret strpos() can never match. Only a
+     * value sitting at the clamp boundary can have been cut that way, so
+     * shorter values are left alone and ordinary prose is unaffected.
+     */
+    private static function endsMidSecret($value, $secret)
+    {
+        if (strlen($value) < self::MAX_TEXT_BYTES - 3) {
+            return false;
+        }
+
+        $longest = min(strlen($value), strlen($secret) - 1);
+
+        for ($length = self::MIN_SECRET_FRAGMENT; $length <= $longest; $length++) {
+            if (substr($value, -$length) === substr($secret, 0, $length)) {
+                return true;
             }
         }
 
@@ -744,6 +803,8 @@ class PaypercutEvent
      */
     public static function identifier($value)
     {
-        return preg_match('/^[A-Za-z0-9_.:-]{1,64}$/', (string)$value) ? (string)$value : '';
+        // \z with the D modifier, not $: PCRE lets $ match before a trailing
+        // newline, which would pass an identifier carrying one.
+        return preg_match('/^[A-Za-z0-9_.:-]{1,64}\z/D', (string)$value) ? (string)$value : '';
     }
 }

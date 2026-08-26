@@ -54,17 +54,10 @@ class PaypercutEventQueue
         $safe = array();
 
         foreach ($envelopes as $envelope) {
-            // `error` is a top-level sibling of `attrs`, so it has to be named
-            // here or it bypasses the one gate every producer funnels through.
-            $screened = array();
-
-            foreach (array('attrs', 'error') as $field) {
-                if (isset($envelope[$field]) && is_array($envelope[$field])) {
-                    $screened[$field] = $envelope[$field];
-                }
-            }
-
-            if (PaypercutEvent::isDenied($screened, $secrets)) {
+            // The WHOLE envelope, never a named subset of it: `error` and the
+            // correlation ids are top-level siblings of `attrs`, and a subset
+            // silently stops covering whatever envelope() gains next.
+            if (PaypercutEvent::isEnvelopeDenied($envelope, $secrets)) {
                 // The event NAME only - never the envelope.
                 PaypercutTelemetrySession::audit(
                     'Telemetry: event dropped by the deny assertion',
