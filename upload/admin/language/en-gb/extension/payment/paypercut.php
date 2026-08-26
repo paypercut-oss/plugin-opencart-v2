@@ -82,3 +82,59 @@ $_['error_refund_failed'] = 'Refund failed. Please try again or contact support.
 // Button
 $_['button_test_connection'] = 'Test Connection';
 $_['button_apple_domain_refresh'] = 'Refresh from PayPerCut CDN';
+
+// Connection environment
+$_['entry_environment'] = 'Environment';
+$_['help_environment'] = 'Which Paypercut environment this store connects to. Leave on Production unless Paypercut support asked you to change it. Both the payment API and the debug-session service are chosen by this setting.';
+
+// Debug session (client telemetry)
+$_['heading_telemetry'] = 'Debug session';
+$_['text_telemetry_idle_lead'] = 'Off. Nothing is sent to Paypercut until you start a session.';
+$_['text_telemetry_idle_help'] = 'Turn on detailed diagnostics for about an hour so Paypercut support can see what your store is doing. The session ends by itself.';
+$_['text_telemetry_running'] = 'Debug session running - %s remaining';
+$_['text_telemetry_started_by'] = 'Started by %1$s . ends at %2$s';
+$_['text_telemetry_session_id'] = 'Session ID';
+$_['text_telemetry_last_session_id'] = 'Last session ID %s - quote this in your support ticket.';
+$_['text_telemetry_counters'] = '%1$s events sent . %2$s dropped (approximate)';
+$_['text_telemetry_ended'] = 'Debug session ended.';
+$_['text_telemetry_ended_help'] = 'Paypercut stops receiving data from this store.';
+$_['text_telemetry_reference'] = 'Support reference';
+$_['text_telemetry_notice'] = 'Paypercut: a debug session started by %1$s is running until %2$s.';
+$_['text_telemetry_manage'] = 'Manage it';
+$_['text_telemetry_log_summary'] = 'Show the %s event(s) sent';
+$_['text_telemetry_log_help'] = 'Exactly what was sent to Paypercut, newest last. The most recent %s are kept on this store and cleared when a new session starts.';
+$_['text_telemetry_log_time'] = 'Time (UTC)';
+$_['text_telemetry_log_event'] = 'Event';
+$_['text_telemetry_log_detail'] = 'Detail';
+$_['text_telemetry_log_raw'] = 'Show raw JSON';
+
+// Disclosure - kept word-identical with docs/telemetry.md and the store listing.
+$_['text_telemetry_disclosure_heading'] = 'What is shared';
+$_['text_telemetry_disclosure_shared'] = 'Extension, OpenCart, PHP and theme versions; the extensions installed on this store and their versions; how this store has the Paypercut extension configured (which checkout mode is selected and which options are switched on - never the values of your credentials); a record of each checkout, refund and payment notification the extension handled and whether it succeeded, identified by OpenCart order number and Paypercut payment reference; when something fails, the error message, the file and line it came from, and which extension or theme raised it; and when the session started and stopped.';
+$_['text_telemetry_disclosure_not_shared_label'] = 'Not shared:';
+$_['text_telemetry_disclosure_not_shared'] = 'customer names, email addresses, billing or shipping addresses, order totals, line items, payment card data, the reason text you type when issuing a refund, or any API key, webhook secret or password.';
+$_['text_telemetry_disclosure_key'] = 'Your API key is never sent to the telemetry service. It is used once, over HTTPS, to obtain a short-lived diagnostic token from api.paypercut.io.';
+$_['text_telemetry_disclosure_retention'] = 'Paypercut keeps this diagnostic data for 30 days.';
+
+// Consent modal
+$_['text_telemetry_modal_title'] = 'Start a debug session?';
+$_['text_telemetry_modal_lead'] = 'While the session is running, this store sends the diagnostic information below to Paypercut so support can see what is happening.';
+$_['text_telemetry_modal_duration'] = 'The session lasts about 60 minutes and then stops by itself. You can stop it sooner at any time.';
+
+$_['button_telemetry_start'] = 'Start debug session';
+$_['button_telemetry_start_confirm'] = 'Start session';
+$_['button_telemetry_stop'] = 'Stop now';
+$_['button_telemetry_retry'] = 'Try again';
+$_['button_telemetry_copy'] = 'Copy';
+$_['text_telemetry_copied'] = 'Copied';
+$_['text_telemetry_starting'] = 'Starting...';
+$_['text_telemetry_stopping'] = 'Stopping...';
+$_['text_telemetry_session_ended'] = 'Debug session ended.';
+$_['text_telemetry_network_error'] = 'Could not reach this store\'s admin. Please reload the page and try again.';
+$_['text_telemetry_admin_unreachable'] = 'This store stopped answering the debug session panel. Reload the page to resume.';
+
+$_['error_telemetry_disabled'] = 'Debug sessions are switched off on this store.';
+$_['error_telemetry_start_locked'] = 'A debug session is already being started.';
+$_['error_telemetry_no_key'] = 'Enter and save your Paypercut API key before starting a debug session.';
+$_['error_telemetry_no_environment'] = 'This store\'s Paypercut connection does not record which environment it uses, so a debug session cannot be started. Save the settings form once, then try again.';
+$_['error_telemetry_environment_unsupported'] = 'Debug sessions are not available on this store\'s Paypercut environment.';

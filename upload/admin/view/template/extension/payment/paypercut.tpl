@@ -32,6 +32,7 @@
             <li><a href="#tab-payment" data-toggle="tab"><i class="fa fa-credit-card"></i> Payment Settings</a></li>
             <li><a href="#tab-webhooks" data-toggle="tab"><i class="fa fa-bell"></i> Webhooks</a></li>
             <li><a href="#tab-general" data-toggle="tab"><i class="fa fa-cog"></i> General</a></li>
+            <li><a href="#tab-diagnostics" data-toggle="tab"><i class="fa fa-stethoscope"></i> Diagnostics</a></li>
           </ul>
           
           <div class="tab-content">
@@ -68,6 +69,26 @@
               <?php if ($error_api_key) { ?>
               <div class="text-danger"><?php echo $error_api_key; ?></div>
               <?php } ?>
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="col-sm-2 control-label" for="input-environment">
+              <?php echo $entry_environment; ?>
+              <span data-toggle="tooltip" title="<?php echo $help_environment; ?>" data-placement="right">
+                <i class="fa fa-question-circle"></i>
+              </span>
+            </label>
+            <div class="col-sm-10">
+              <select name="paypercut_environment" id="input-environment" class="form-control">
+                <?php foreach ($paypercut_environments as $environment_option) { ?>
+                <?php if ($environment_option == $paypercut_environment) { ?>
+                <option value="<?php echo $environment_option; ?>" selected="selected"><?php echo ucfirst($environment_option); ?></option>
+                <?php } else { ?>
+                <option value="<?php echo $environment_option; ?>"><?php echo ucfirst($environment_option); ?></option>
+                <?php } ?>
+                <?php } ?>
+              </select>
+              <span class="help-block"><i class="fa fa-info-circle"></i> <?php echo $help_environment; ?> <code><?php echo $paypercut_api_base; ?></code></span>
             </div>
           </div>
           <?php if ($payment_method_configs) { ?>
@@ -363,12 +384,127 @@
               </div>
             </div>
             
+
+            <!-- Diagnostics Tab -->
+            <div class="tab-pane" id="tab-diagnostics">
+              <div style="padding: 15px 0;" id="paypercut-debug-session"
+                   data-token="<?php echo $token; ?>"
+                   data-poll-seconds="<?php echo (int)$telemetry_poll_seconds; ?>"
+                   data-now="<?php echo (int)$telemetry_now; ?>"
+                   data-state="<?php echo $telemetry_state['state']; ?>"
+                   data-expires-at="<?php echo (int)$telemetry_state['expires_at']; ?>">
+
+                <h4><?php echo $heading_telemetry; ?></h4>
+
+                <div id="paypercut-debug-session-status" class="alert" style="display:none;"></div>
+
+                <div data-paypercut-state="idle" <?php echo $telemetry_state['state'] == 'idle' ? '' : 'style="display:none;"'; ?>>
+                  <p><?php echo $text_telemetry_idle_lead; ?></p>
+                  <p class="help-block"><?php echo $text_telemetry_idle_help; ?></p>
+                  <?php echo $telemetry_disclosure; ?>
+                  <?php if ($telemetry_start_enabled) { ?>
+                  <button type="button" class="btn btn-primary paypercut-debug-start"><i class="fa fa-play"></i> <?php echo $button_telemetry_start; ?></button>
+                  <?php } ?>
+                </div>
+
+                <div data-paypercut-state="running" <?php echo $telemetry_state['state'] == 'running' ? '' : 'style="display:none;"'; ?>>
+                  <p><strong><i class="fa fa-circle text-danger"></i>
+                    <?php echo sprintf($text_telemetry_running, '<span data-paypercut-countdown>-</span>'); ?>
+                  </strong></p>
+                  <p class="help-block">
+                    <?php echo sprintf($text_telemetry_started_by, '<span data-paypercut-started-by>' . $telemetry_state['started_by_name'] . '</span>', '<span data-paypercut-ends-at>' . $telemetry_ends_at . '</span>'); ?>
+                  </p>
+                  <p>
+                    <?php echo $text_telemetry_session_id; ?>
+                    <code data-paypercut-session-id><?php echo $telemetry_state['session_id']; ?></code>
+                    <button type="button" class="btn btn-link btn-xs" data-paypercut-copy><?php echo $button_telemetry_copy; ?></button>
+                  </p>
+                  <p class="help-block">
+                    <?php echo sprintf($text_telemetry_counters, '<span data-paypercut-sent>' . (int)$telemetry_state['events_sent'] . '</span>', '<span data-paypercut-dropped>' . (int)$telemetry_state['events_dropped'] . '</span>'); ?>
+                  </p>
+                  <button type="button" class="btn btn-danger paypercut-debug-stop"><i class="fa fa-stop"></i> <?php echo $button_telemetry_stop; ?></button>
+                </div>
+
+                <div data-paypercut-state="ended" <?php echo $telemetry_state['state'] == 'ended' ? '' : 'style="display:none;"'; ?>>
+                  <p><strong><?php echo $text_telemetry_ended; ?></strong> <?php echo $text_telemetry_ended_help; ?></p>
+                  <p>
+                    <?php echo sprintf($text_telemetry_last_session_id, '<code data-paypercut-session-id>' . $telemetry_state['session_id'] . '</code>'); ?>
+                    <button type="button" class="btn btn-link btn-xs" data-paypercut-copy><?php echo $button_telemetry_copy; ?></button>
+                  </p>
+                  <?php if ($telemetry_start_enabled) { ?>
+                  <button type="button" class="btn btn-primary paypercut-debug-start"><i class="fa fa-play"></i> <?php echo $button_telemetry_start; ?></button>
+                  <?php } ?>
+                </div>
+
+                <div data-paypercut-state="failed" <?php echo $telemetry_state['state'] == 'failed' ? '' : 'style="display:none;"'; ?>>
+                  <div class="alert alert-danger" data-paypercut-failed-message><?php echo $telemetry_state['message']; ?></div>
+                  <p data-paypercut-reference <?php echo $telemetry_state['trace_id'] == '' ? 'style="display:none;"' : ''; ?>>
+                    <?php echo $text_telemetry_reference; ?>
+                    <code data-paypercut-trace-id><?php echo $telemetry_state['trace_id']; ?></code>
+                    <button type="button" class="btn btn-link btn-xs" data-paypercut-copy><?php echo $button_telemetry_copy; ?></button>
+                  </p>
+                  <?php if ($telemetry_start_enabled) { ?>
+                  <button type="button" class="btn btn-primary paypercut-debug-start"><i class="fa fa-refresh"></i> <?php echo $button_telemetry_retry; ?></button>
+                  <?php } ?>
+                </div>
+
+                <?php if ($telemetry_log) { ?>
+                <div data-paypercut-log style="margin-top: 20px;">
+                  <h5><?php echo sprintf($text_telemetry_log_summary, count($telemetry_log)); ?></h5>
+                  <p class="help-block"><?php echo sprintf($text_telemetry_log_help, (int)$telemetry_log_max); ?></p>
+                  <div style="max-height: 320px; overflow: auto;">
+                    <table class="table table-condensed table-striped">
+                      <thead>
+                        <tr>
+                          <td><?php echo $text_telemetry_log_time; ?></td>
+                          <td><?php echo $text_telemetry_log_event; ?></td>
+                          <td><?php echo $text_telemetry_log_detail; ?></td>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <?php foreach ($telemetry_log as $telemetry_entry) { ?>
+                        <tr>
+                          <td><code><?php echo htmlspecialchars($telemetry_entry['occurred_at'], ENT_QUOTES, 'UTF-8'); ?></code></td>
+                          <td><code><?php echo htmlspecialchars($telemetry_entry['event'], ENT_QUOTES, 'UTF-8'); ?></code></td>
+                          <td><?php echo htmlspecialchars($telemetry_entry['detail'], ENT_QUOTES, 'UTF-8'); ?></td>
+                        </tr>
+                        <?php } ?>
+                      </tbody>
+                    </table>
+                  </div>
+                  <p><a href="#" onclick="$('#paypercut-debug-raw').toggle(); return false;"><?php echo $text_telemetry_log_raw; ?></a></p>
+                  <pre id="paypercut-debug-raw" style="display:none; max-height: 320px; overflow: auto;"><?php echo htmlspecialchars($telemetry_log_raw, ENT_QUOTES, 'UTF-8'); ?></pre>
+                </div>
+                <?php } ?>
+              </div>
+            </div>
+
           </div><!-- /.tab-content -->
         </form>
       </div>
     </div>
   </div>
 </div>
+<div class="modal fade" id="paypercut-debug-modal" tabindex="-1" role="dialog">
+  <div class="modal-dialog" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+        <h4 class="modal-title"><?php echo $text_telemetry_modal_title; ?></h4>
+      </div>
+      <div class="modal-body">
+        <p><?php echo $text_telemetry_modal_lead; ?></p>
+        <?php echo $telemetry_disclosure; ?>
+        <p class="help-block"><?php echo $text_telemetry_modal_duration; ?></p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-default" data-dismiss="modal"><?php echo $button_cancel; ?></button>
+        <button type="button" class="btn btn-primary" id="paypercut-debug-confirm"><?php echo $button_telemetry_start_confirm; ?></button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script type="text/javascript">
 // Initialize tooltips
 $('[data-toggle="tooltip"]').tooltip();
@@ -536,5 +672,346 @@ function deleteWebhook() {
         }
     });
 }
+
+// ---------------------------------------------------------------------------
+// Debug (telemetry) session panel: the consent modal, the live countdown, and
+// a poll that doubles as the delivery trigger while this screen is open.
+// ---------------------------------------------------------------------------
+(function () {
+    var panel = document.getElementById('paypercut-debug-session');
+
+    if (!panel) {
+        return;
+    }
+
+    var i18n = {
+        copied: <?php echo json_encode($text_telemetry_copied); ?>,
+        copy: <?php echo json_encode($button_telemetry_copy); ?>,
+        starting: <?php echo json_encode($text_telemetry_starting); ?>,
+        startSession: <?php echo json_encode($button_telemetry_start_confirm); ?>,
+        stopping: <?php echo json_encode($text_telemetry_stopping); ?>,
+        stopNow: <?php echo json_encode($button_telemetry_stop); ?>,
+        sessionEnded: <?php echo json_encode($text_telemetry_session_ended); ?>,
+        networkError: <?php echo json_encode($text_telemetry_network_error); ?>,
+        adminUnreachable: <?php echo json_encode($text_telemetry_admin_unreachable); ?>
+    };
+
+    var token = panel.getAttribute('data-token');
+    var pollSeconds = parseInt(panel.getAttribute('data-poll-seconds'), 10) || 60;
+    var state = {
+        state: panel.getAttribute('data-state'),
+        expires_at: parseInt(panel.getAttribute('data-expires-at'), 10) || 0
+    };
+
+    var pollTimer = null;
+    var tickTimer = null;
+    // Guards against the deadline tick firing a request every second.
+    var polling = false;
+    var deadlineConfirmed = false;
+    var pollFailures = 0;
+    // Offset between this browser's clock and the server's, so a wrong local
+    // clock cannot make the countdown disagree with when the session ends.
+    var clockOffset = (parseInt(panel.getAttribute('data-now'), 10) || 0) - Math.floor(Date.now() / 1000);
+
+    function serverNow() {
+        return Math.floor(Date.now() / 1000) + clockOffset;
+    }
+
+    function show(message, kind) {
+        var box = document.getElementById('paypercut-debug-session-status');
+        if (!box) { return; }
+        box.textContent = message;
+        box.className = 'alert alert-' + (kind === 'error' ? 'danger' : 'success');
+        box.style.display = '';
+    }
+
+    function hideStatus() {
+        var box = document.getElementById('paypercut-debug-session-status');
+        if (box) { box.style.display = 'none'; }
+    }
+
+    function fill(selector, value) {
+        var nodes = panel.querySelectorAll(selector);
+        for (var i = 0; i < nodes.length; i++) {
+            nodes[i].textContent = value;
+        }
+    }
+
+    function pad(value) {
+        return value < 10 ? '0' + value : String(value);
+    }
+
+    function formatClock(unixSeconds) {
+        var date = new Date(unixSeconds * 1000);
+        return pad(date.getHours()) + ':' + pad(date.getMinutes());
+    }
+
+    function formatRemaining(seconds) {
+        if (seconds < 0) { seconds = 0; }
+        return Math.floor(seconds / 60) + ':' + pad(seconds % 60);
+    }
+
+    function render() {
+        var blocks = panel.querySelectorAll('[data-paypercut-state]');
+        for (var i = 0; i < blocks.length; i++) {
+            blocks[i].style.display = blocks[i].getAttribute('data-paypercut-state') === state.state ? '' : 'none';
+        }
+
+        fill('[data-paypercut-session-id]', state.session_id || '');
+        fill('[data-paypercut-started-by]', state.started_by_name || '');
+        fill('[data-paypercut-sent]', String(state.events_sent || 0));
+        fill('[data-paypercut-dropped]', String(state.events_dropped || 0));
+        fill('[data-paypercut-ends-at]', state.expires_at ? formatClock(state.expires_at) : '');
+
+        if (state.state === 'failed') {
+            // The failed block carries this message itself. Leaving the transient
+            // status box up as well prints the same red notice twice.
+            hideStatus();
+            fill('[data-paypercut-failed-message]', state.message || '');
+            fill('[data-paypercut-trace-id]', state.trace_id || '');
+
+            var reference = panel.querySelector('[data-paypercut-reference]');
+            if (reference) {
+                reference.style.display = state.trace_id ? '' : 'none';
+            }
+        }
+
+        tick();
+    }
+
+    function tick() {
+        if (state.state !== 'running') { return; }
+
+        var remaining = (state.expires_at || 0) - serverNow();
+        fill('[data-paypercut-countdown]', formatRemaining(remaining));
+
+        // Ask the server to confirm and tear down - once, not once per second.
+        if (remaining <= 0 && !deadlineConfirmed) {
+            deadlineConfirmed = true;
+            poll();
+        }
+    }
+
+    function apply(next) {
+        var ended = state.state === 'running' && next.state !== 'running';
+        var started = state.state !== 'running' && next.state === 'running';
+
+        state = next;
+        pollFailures = 0;
+
+        if (started) {
+            deadlineConfirmed = false;
+            // Starting clears the log server-side. This block is rendered once
+            // per page load, so without this the merchant expands it and reads
+            // the previous session's events under the new session's heading.
+            dropSentLog();
+        }
+
+        if (typeof next.now === 'number') {
+            clockOffset = next.now - Math.floor(Date.now() / 1000);
+        }
+
+        render();
+
+        if (next.state !== 'running') {
+            stopTicking();
+        } else {
+            startTicking();
+        }
+
+        if (ended) {
+            show(i18n.sessionEnded, 'success');
+        }
+    }
+
+    function dropSentLog() {
+        var log = panel.querySelector('[data-paypercut-log]');
+        if (log && log.parentNode) {
+            log.parentNode.removeChild(log);
+        }
+    }
+
+    function request(action, onDone) {
+        $.ajax({
+            url: 'index.php?route=extension/payment/paypercut/' + action + '&token=' + encodeURIComponent(token),
+            type: 'post',
+            dataType: 'json',
+            success: function (data) { onDone(data, null); },
+            // A host WAF answering the admin route with HTML lands here.
+            error: function (xhr) { onDone(xhr.responseJSON || null, true); }
+        });
+    }
+
+    function poll() {
+        if (polling) { return; }
+        polling = true;
+
+        request('debugSessionStatus', function (data, failed) {
+            polling = false;
+
+            if (failed && !data) {
+                pollFailures++;
+
+                // A blip should not freeze the panel for good, but a host that
+                // keeps answering with HTML should not be polled forever either.
+                if (pollFailures >= 3) {
+                    stopPolling();
+                    stopTicking();
+                    show(i18n.adminUnreachable, 'error');
+                    return;
+                }
+
+                schedulePoll(pollFailures * 30000);
+                return;
+            }
+
+            if (data && data.success && data.data) {
+                apply(data.data);
+            }
+
+            schedulePoll();
+        });
+    }
+
+    function schedulePoll(overrideMs) {
+        stopPolling();
+
+        if (state.state !== 'running' || document.hidden) { return; }
+
+        // +/-20% jitter so many open dashboards do not land together.
+        var delay = overrideMs || (pollSeconds * 1000) * (0.8 + Math.random() * 0.4);
+        pollTimer = window.setTimeout(poll, delay);
+    }
+
+    function stopPolling() {
+        if (pollTimer) { window.clearTimeout(pollTimer); pollTimer = null; }
+    }
+
+    function startTicking() {
+        if (!tickTimer) { tickTimer = window.setInterval(tick, 1000); }
+    }
+
+    function stopTicking() {
+        if (tickTimer) { window.clearInterval(tickTimer); tickTimer = null; }
+    }
+
+    $(panel).on('click', '.paypercut-debug-start', function (event) {
+        event.preventDefault();
+        hideStatus();
+        $('#paypercut-debug-modal').modal('show');
+    });
+
+    $(panel).on('click', '.paypercut-debug-stop', function (event) {
+        event.preventDefault();
+
+        var button = this;
+        button.disabled = true;
+        button.textContent = i18n.stopping;
+
+        request('stopDebugSession', function (data, failed) {
+            button.disabled = false;
+            button.textContent = i18n.stopNow;
+
+            if (failed && !data) {
+                show(i18n.networkError, 'error');
+                return;
+            }
+
+            if (data && data.success && data.data) {
+                apply(data.data);
+            } else if (data && data.message) {
+                show(data.message, 'error');
+            }
+        });
+    });
+
+    $(panel).on('click', '[data-paypercut-copy]', function (event) {
+        event.preventDefault();
+
+        // Two rows offer a Copy button - the session id and the support
+        // reference - so copy the code beside this one, not the first on screen.
+        var row = $(this).closest('p');
+        var node = row.find('code')[0] || panel.querySelector('[data-paypercut-session-id]');
+        var value = node ? node.textContent : '';
+
+        if (!value) { return; }
+
+        var button = this;
+        var confirmCopy = function () {
+            button.textContent = i18n.copied;
+            window.setTimeout(function () { button.textContent = i18n.copy; }, 2000);
+        };
+
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(value).then(confirmCopy, function () {});
+            return;
+        }
+
+        var field = document.createElement('textarea');
+        field.value = value;
+        document.body.appendChild(field);
+        field.select();
+
+        try {
+            document.execCommand('copy');
+            confirmCopy();
+        } catch (error) {
+            // Copying is a convenience; the id is on screen either way.
+        }
+
+        document.body.removeChild(field);
+    });
+
+    $('#paypercut-debug-confirm').on('click', function (event) {
+        event.preventDefault();
+
+        var button = this;
+        button.disabled = true;
+        button.textContent = i18n.starting;
+
+        request('startDebugSession', function (data, failed) {
+            button.disabled = false;
+            button.textContent = i18n.startSession;
+            $('#paypercut-debug-modal').modal('hide');
+
+            if (failed && !data) {
+                show(i18n.networkError, 'error');
+                return;
+            }
+
+            if (data && data.success && data.data) {
+                apply(data.data);
+                schedulePoll();
+                return;
+            }
+
+            if (data && data.message) {
+                show(data.message, 'error');
+            }
+
+            // A rejected start writes a `failed` record, so re-read it.
+            poll();
+        });
+    });
+
+    document.addEventListener('visibilitychange', function () {
+        if (document.hidden) {
+            stopPolling();
+            return;
+        }
+
+        if (state.state === 'running') {
+            poll();
+        }
+    });
+
+    // The server painted the current state, so only the live parts need a poll.
+    if (state.state === 'running') {
+        startTicking();
+        tick();
+        schedulePoll();
+    }
+})();
+
 </script>
 <?php echo $footer; ?>
