@@ -230,11 +230,15 @@ Four things enforce that, in order:
    value shapes, a Luhn PAN check, and the store's **actual** credentials.
    Screening a named subset is what let a card number ride in `order_ref`, so
    `isEnvelopeDenied()` takes the envelope whole and any field added to
-   `envelope()` is covered by construction. The literal-secret comparison also
-   catches a credential the 256-byte clamp cut part-way through. A tripped
-   assertion **drops the whole event**, not the offending field: an event
-   assembled wrongly cannot be trusted in its other parts either. Only the event
-   *name* is audit-logged.
+   `envelope()` is covered by construction. **Keys are screened by the value
+   rules too**, not only by the name-shape regex — a key is serialised exactly
+   as a value is, and PHP turns a digits-only key into an int on the way in. The
+   PAN check slides a 13–19 digit window across a digit run (a PAN with other
+   digits pressed against it is still a PAN); a window inside a longer run must
+   also carry an issuer prefix, or one long order id in ten would be denied on
+   arithmetic alone. A tripped assertion **drops the whole event**, not the
+   offending field: an event assembled wrongly cannot be trusted in its other
+   parts either. Only the event *name* is audit-logged.
 3. **"Our text yes, upstream text no."** No exception message ever travels:
    `PaypercutEvent::failure()` takes an exception's type and `file:line` stack
    and discards its message, and `apiFailure()` never reads the platform's
@@ -250,7 +254,15 @@ Four things enforce that, in order:
    mangled; stacks are `file:line` only, at most 8 frames, relative to the
    OpenCart install with `[external]` for anything outside it. Never
    `getTraceAsString()` — it renders call arguments, which here are checkout
-   payloads and credentials.
+   payloads and credentials. Clamping happens **after** the screen: `text()`
+   screens the value the caller passed, and hands the assertion the untruncated
+   value when it trips, because 15 of 16 PAN digits is not redaction — Luhn
+   completes the sixteenth uniquely. The three correlation ids
+   (`payment_intent_id`, `payment_id`, `order_ref`) are bounded to an identifier
+   charset rather than free text, because they are the only wire values fed
+   straight from an upstream payload and the webhook feeding two of them is
+   unauthenticated; lossless here, since `orderRef()` returns the bare order id.
+   A correlation id that does not fit drops the **field**, never the event.
 
 `PaypercutTelemetrySession::credentials()` enumerates
 `paypercut_api_key`, `paypercut_webhook_secret` and the live telemetry token.

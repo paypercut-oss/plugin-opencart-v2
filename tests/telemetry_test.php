@@ -149,6 +149,49 @@ ok(!PaypercutEvent::isDenied(array('note' => 'transaction 1234567890123456 not f
 ok(!PaypercutEvent::isDenied(array('note' => 'expired at 1787250271000')), 'permits a millisecond timestamp');
 ok(!PaypercutEvent::isDenied(array('note' => 'amount 4250 refused')), 'permits a small amount');
 
+// A PAN pressed against other digits is still a PAN: the scan slides a window
+// across the whole run rather than anchoring to its start.
+$brands = array(
+    'Visa' => '4111111111111111',
+    'Visa 13' => '4222222222222',
+    'Visa 19' => '4917610000000000003',
+    'Mastercard' => '5555555555554444',
+    'Mastercard 2-series' => '2221000000000009',
+    'Amex' => '378282246310005',
+    'Discover' => '6011111111111117',
+    'JCB' => '3530111333300000',
+    'Diners' => '30569309025904',
+    'Maestro' => '5018000000000009'
+);
+
+foreach ($brands as $brand => $pan) {
+    ok(PaypercutEvent::containsCardNumber($pan), 'finds a bare ' . $brand . ' PAN');
+    ok(PaypercutEvent::containsCardNumber(str_repeat('7', 40) . $pan), 'finds a ' . $brand . ' PAN behind 40 leading digits');
+    ok(PaypercutEvent::containsCardNumber($pan . str_repeat('7', 40)), 'finds a ' . $brand . ' PAN in front of 40 trailing digits');
+    ok(PaypercutEvent::isDenied(array('note' => 'ref 99887766554433221100' . $pan . ' failed')), 'denies a ' . $brand . ' PAN inside a longer run');
+}
+
+// The sliding window must not turn every long number into a card: Luhn alone
+// passes one run in ten, so a window also has to carry an issuer's prefix.
+foreach (array('1234567890123456', '1787250271000', '1787250271000000000', '99887766554433221100', '2418', '10000000000000000') as $permitted) {
+    ok(!PaypercutEvent::containsCardNumber($permitted), 'permits the digit run ' . $permitted);
+}
+
+// 3b. Keys are serialised exactly as values are, so the value rules screen
+// them too - the name-shape regex alone let a PAN or a credential travel in
+// key position. Digits-only keys arrive as ints; the screen must still see them.
+foreach (array('4111111111111111', 'Card 4111111111111111 was declined', 'sk_live_realstoresecret', 'eyJhbGciOiJSUzI1NiJ9.payload') as $poison) {
+    ok(PaypercutEvent::isDenied(array($poison => 'x')), 'denies poison in KEY position: ' . substr($poison, 0, 24));
+    ok(PaypercutEvent::isDenied(array('clean' => 'ok', $poison => 'x')), 'denies poison in KEY position beside a clean pair');
+    ok(PaypercutEvent::isDenied(array('error' => array($poison => 'x'))), 'denies poison in a nested KEY position');
+    ok(
+        PaypercutEvent::isEnvelopeDenied(PaypercutEvent::of('checkout.started', array($poison => 'x'))->envelope(0), $secrets),
+        'the whole envelope is denied for poison in KEY position'
+    );
+}
+
+ok(PaypercutEvent::isDenied(array('sk_live_realstoresecret' => 'x'), $secrets), 'denies a literal stored secret in KEY position');
+
 // 4. Literal comparison against the store's actual credentials.
 ok(PaypercutEvent::isDenied(array('note' => 'used sk_live_realstoresecret here'), $secrets), 'denies a literal stored secret');
 ok(!PaypercutEvent::isDenied(array('note' => 'nothing to see'), $secrets), 'permits a clean value');
@@ -180,7 +223,7 @@ $maximal = PaypercutEvent::failure(
     new Exception('unusable')
 )
     ->because('threw RuntimeException')
-    ->about(array('payment_intent_id' => 'pi_1', 'payment_id' => 'pay_1', 'order_ref' => 'WC-2026/8891'))
+    ->about(array('payment_intent_id' => 'pi_1', 'payment_id' => 'pay_1', 'order_ref' => '2418'))
     ->envelope(1787250271);
 
 ok(!PaypercutEvent::isEnvelopeDenied($maximal, $store_secrets), 'a clean envelope passes the screen');
@@ -204,6 +247,25 @@ foreach ($maximal as $field => $value) {
         ok(
             PaypercutEvent::isEnvelopeDenied($envelope, $store_secrets),
             'denies ' . $label . ' in ' . $field
+        );
+
+        // The same poison in KEY position. An array field takes it as its own
+        // key; a scalar field cannot hold one, so the envelope's key is used.
+        $envelope = $maximal;
+
+        if (is_array($value)) {
+            // Assigned, not array_merge()d: merge REINDEXES the integer key a
+            // digits-only poison becomes, which would quietly unplant it.
+            $planted = $value;
+            $planted[$poison] = 'planted';
+            $envelope[$field] = $planted;
+        } else {
+            $envelope[$poison] = $value;
+        }
+
+        ok(
+            PaypercutEvent::isEnvelopeDenied($envelope, $store_secrets),
+            'denies ' . $label . ' in KEY position at ' . $field
         );
     }
 }
@@ -234,6 +296,61 @@ ok(
     ),
     'a clamped value with no secret in it still passes'
 );
+
+same(
+    256,
+    strlen(PaypercutEvent::of('x', array('note' => str_repeat('a', 300)))->envelope(0)['attrs']['note']),
+    'a clean over-long value is still clamped to the byte cap'
+);
+
+// A PAN that starts inside the clamp and ends past it. Fifteen of sixteen
+// digits is not redaction - Luhn completes the sixteenth uniquely - so the
+// screen has to see the value BEFORE it is cut, not after.
+for ($offset = 230; $offset <= 262; $offset++) {
+    $envelope = PaypercutEvent::of('checkout.session_create_failed', array(
+        'note' => str_repeat('x', $offset) . '4111111111111111'
+    ))->envelope(0);
+
+    ok(
+        PaypercutEvent::isEnvelopeDenied($envelope),
+        'denies a PAN starting at byte ' . $offset . ', across the clamp boundary'
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Correlation ids are bounded to an identifier charset, not to free text.
+//
+// They are the only wire values fed straight from an upstream payload, and the
+// webhook feeding two of them is unauthenticated. Lossless on this platform:
+// orderRef() returns the bare order id.
+// ---------------------------------------------------------------------------
+
+foreach (array('2418', '1', '104857', 'pi_3PabcDEF1234567890', 'cs_live_a1B2c3D4e5F6g7H8', 'ch_3PabcDEF.1') as $id) {
+    $envelope = PaypercutEvent::of('webhook.order_updated')->about(array(
+        'payment_intent_id' => $id,
+        'payment_id' => $id,
+        'order_ref' => $id
+    ))->envelope(0);
+
+    same($id, $envelope['order_ref'], 'a real correlation id survives intact: ' . $id);
+    same($id, $envelope['payment_id'], 'a real payment_id survives intact: ' . $id);
+    same($id, $envelope['payment_intent_id'], 'a real payment_intent_id survives intact: ' . $id);
+}
+
+foreach (array('<script>x</script>', 'https://evil.example/a?b=c', "0'; DROP--", 'two words', "\xE2\x80\xAEtxet", str_repeat('A', 200)) as $hostile) {
+    $envelope = PaypercutEvent::of('webhook.received')->about(array(
+        'payment_intent_id' => $hostile,
+        'payment_id' => $hostile,
+        'order_ref' => $hostile
+    ))->envelope(0);
+
+    ok(!isset($envelope['order_ref']), 'drops a free-text order_ref: ' . substr($hostile, 0, 20));
+    ok(!isset($envelope['payment_id']), 'drops a free-text payment_id: ' . substr($hostile, 0, 20));
+    ok(!isset($envelope['payment_intent_id']), 'drops a free-text payment_intent_id: ' . substr($hostile, 0, 20));
+
+    // Dropping the field, never the event: a clean event still delivers.
+    ok(!PaypercutEvent::isEnvelopeDenied($envelope), 'the event around a dropped correlation id still passes');
+}
 
 // ---------------------------------------------------------------------------
 // Named constructors are the boundary: snapshots walk their OWN schema.

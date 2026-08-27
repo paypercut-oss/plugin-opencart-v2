@@ -37,6 +37,20 @@ class PaypercutEvent
     const MIN_SECRET_FRAGMENT = 4;
 
     /**
+     * How far past MAX_TEXT_BYTES text() screens before it clamps.
+     *
+     * Wide enough for the longest thing the screen recognises (a 19-digit PAN
+     * with separators, or a credential) to be seen whole even when it starts
+     * on the last byte inside the cap. See text().
+     */
+    const SCREEN_OVERSHOOT_BYTES = 64;
+
+    /**
+     * Longest correlation id kept, in bytes. See correlationId().
+     */
+    const MAX_CORRELATION_BYTES = 128;
+
+    /**
      * Field names that must never appear in an event, whatever their value.
      */
     private static $denied_key_pattern = '/secret|token|password|credential|nonce|auth|_key$/i';
@@ -50,6 +64,12 @@ class PaypercutEvent
      * tripped assertion bins the whole event.
      */
     private static $denied_value_pattern = '/(?:^|[^A-Za-z0-9_])(ppc_|sk_|pk_|whsec_|eyJ[A-Za-z0-9_-]+\.)/i';
+
+    /**
+     * Issuer ranges and lengths of the card brands, used only when testing a
+     * WINDOW inside a longer digit run. See containsCardNumber().
+     */
+    private static $card_brand_pattern = '/^(?:4\d{12}(?:\d{3})?(?:\d{3})?|5[1-5]\d{14}|5[06-8]\d{10,17}|2(?:2[2-9]\d|[3-6]\d{2}|7[01]\d|720)\d{12}|220[0-4]\d{12}|3[47]\d{13}|3(?:0[0-5]|[68]\d)\d{11}|35\d{14,17}|6\d{11,18})\z/D';
 
     /**
      * Host and platform versions. Read by environmentSnapshot().
@@ -336,13 +356,31 @@ class PaypercutEvent
     {
         foreach (array('payment_intent_id', 'payment_id', 'order_ref') as $field) {
             $value = isset($correlation[$field]) ? trim((string)$correlation[$field]) : '';
+            $clean = self::correlationId($value);
 
-            if ($value !== '') {
-                $this->correlation[$field] = self::text($value);
+            if ($clean !== '') {
+                $this->correlation[$field] = $clean;
             }
         }
 
         return $this;
+    }
+
+    /**
+     * Bound a correlation id to an identifier charset rather than free text.
+     *
+     * These three fields are the only wire values fed straight from an upstream
+     * payload, and on this platform the webhook that feeds two of them is
+     * unauthenticated - text() would put 256 bytes of attacker-chosen printable
+     * UTF-8 on the wire. Lossless here: every id is either a Paypercut
+     * `pi_`/`cs_`/`pay_` handle or orderRef(), which returns a bare order id.
+     * A value that does not fit drops the FIELD, never the event.
+     */
+    public static function correlationId($value)
+    {
+        return preg_match('/^[A-Za-z0-9_.:-]{1,' . self::MAX_CORRELATION_BYTES . '}\z/D', (string)$value)
+            ? (string)$value
+            : '';
     }
 
     /**
@@ -517,8 +555,13 @@ class PaypercutEvent
             foreach ($chunk as $code => $version) {
                 $position++;
                 $key = self::text((string)$code);
+                $release = self::text((string)$version);
 
-                if ($key === '') {
+                // Codes and versions are the only wire data this extension does
+                // not author. One that would trip the deny assertion is dropped
+                // on its own rather than binning the chunk around it;
+                // plugin_count still reports the true total.
+                if ($key === '' || self::isDeniedValue($key) || self::isDeniedValue($release)) {
                     continue;
                 }
 
@@ -526,11 +569,16 @@ class PaypercutEvent
                 // codes like payment.authorizenet_aim match the denied-key
                 // pattern, which would bin the whole inventory chunk.
                 if (self::isDeniedKey($key)) {
-                    $fields['extension_' . $position] = self::text($key . ' ' . (string)$version);
+                    $moved = self::text($key . ' ' . $release);
+
+                    if (!self::isDeniedValue($moved)) {
+                        $fields['extension_' . $position] = $moved;
+                    }
+
                     continue;
                 }
 
-                $fields[$key] = self::text((string)$version);
+                $fields[$key] = $release;
             }
 
             $events[] = new self('environment.plugins', $fields);
@@ -678,7 +726,12 @@ class PaypercutEvent
         }
 
         foreach ($fields as $key => $value) {
-            if (self::isDeniedKey($key)) {
+            // The key is screened by the VALUE rules as well as the name-shape
+            // rule: a key is serialised onto the wire exactly as a value is, so
+            // a PAN or a credential sitting in key position must not pass. Cast
+            // first - PHP silently turns a digits-only key into an int, which
+            // json_encode then renders straight back out as a string.
+            if (self::isDeniedKey($key) || self::isDeniedValue((string)$key, $secrets)) {
                 return true;
             }
 
@@ -693,29 +746,45 @@ class PaypercutEvent
                 continue;
             }
 
-            if (!is_string($value) || $value === '') {
+            if (self::isDeniedValue($value, $secrets)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Is this single serialised string one that must never leave the store?
+     *
+     * Applied to keys and values alike - both are serialised into the same
+     * JSON - and to a value BEFORE it is clamped, so the screen sees what the
+     * caller actually handed us rather than a truncated fragment of it.
+     */
+    private static function isDeniedValue($value, $secrets = array())
+    {
+        if (!is_string($value) || $value === '') {
+            return false;
+        }
+
+        if (preg_match(self::$denied_value_pattern, $value)) {
+            return true;
+        }
+
+        if (self::containsCardNumber($value)) {
+            return true;
+        }
+
+        // Shape matching is a guess; comparing against the store's actual
+        // credentials is not. This catches a secret whose format we never
+        // anticipated, including one a future Paypercut release introduces.
+        foreach ($secrets as $secret) {
+            if (!is_string($secret) || $secret === '') {
                 continue;
             }
 
-            if (preg_match(self::$denied_value_pattern, $value)) {
+            if (strpos($value, $secret) !== false || self::endsMidSecret($value, $secret)) {
                 return true;
-            }
-
-            if (self::containsCardNumber($value)) {
-                return true;
-            }
-
-            // Shape matching is a guess; comparing against the store's actual
-            // credentials is not. This catches a secret whose format we never
-            // anticipated, including one a future Paypercut release introduces.
-            foreach ($secrets as $secret) {
-                if (!is_string($secret) || $secret === '') {
-                    continue;
-                }
-
-                if (strpos($value, $secret) !== false || self::endsMidSecret($value, $secret)) {
-                    return true;
-                }
             }
         }
 
@@ -765,13 +834,36 @@ class PaypercutEvent
      */
     public static function containsCardNumber($value)
     {
-        if (!preg_match_all('/\d(?:[ -]?\d){12,18}/', (string)$value, $matches)) {
+        if (!preg_match_all('/\d(?:[ -]?\d)+/', (string)$value, $matches)) {
             return false;
         }
 
         foreach ($matches[0] as $candidate) {
-            if (self::luhnValid(preg_replace('/\D/', '', $candidate))) {
+            $digits = (string)preg_replace('/\D/', '', $candidate);
+            $length = strlen($digits);
+
+            // The run taken whole: Luhn alone, whatever the issuer.
+            if (self::luhnValid($digits)) {
                 return true;
+            }
+
+            // Then every 13-19 digit WINDOW inside a longer run: a PAN with
+            // other digits pressed against it is still a PAN, and anchoring to
+            // the run let `77...774111111111111111` through. Windows also have
+            // to look like a card - Luhn alone passes one run in ten, and a
+            // 19-digit order id would be denied half the time on arithmetic.
+            for ($start = 0; $start + 13 <= $length; $start++) {
+                for ($size = 13; $size <= 19 && $start + $size <= $length; $size++) {
+                    if ($start === 0 && $size === $length) {
+                        continue;
+                    }
+
+                    $window = substr($digits, $start, $size);
+
+                    if (preg_match(self::$card_brand_pattern, $window) && self::luhnValid($window)) {
+                        return true;
+                    }
+                }
             }
         }
 
@@ -824,12 +916,33 @@ class PaypercutEvent
             $clean = (string)preg_replace('/[^\x20-\x7E]/', '', $value);
         }
 
-        // mb_strcut cuts on a byte budget while respecting codepoint
-        // boundaries; mb_substr counts codepoints and would overshoot the
-        // edge's byte bound.
+        $clamped = self::cut($clean, self::MAX_TEXT_BYTES);
+
+        if ($clamped === $clean) {
+            return $clamped;
+        }
+
+        // Clamping runs before the deny assertion, so a cut through a PAN or a
+        // credential leaves a fragment the assertion no longer recognises - 15
+        // of 16 PAN digits is not redaction, Luhn completes it uniquely. Screen
+        // what the caller actually passed, and when it trips hand back enough
+        // of it for the assertion to trip too; a denied event is dropped whole
+        // and never leaves the store.
+        $screened = self::cut($clean, self::MAX_TEXT_BYTES + self::SCREEN_OVERSHOOT_BYTES);
+
+        return self::isDeniedValue($screened) ? $screened : $clamped;
+    }
+
+    /**
+     * Cut to a byte budget on a codepoint boundary.
+     *
+     * mb_substr counts codepoints and would overshoot the edge's byte bound.
+     */
+    private static function cut($value, $bytes)
+    {
         return function_exists('mb_strcut')
-            ? mb_strcut($clean, 0, self::MAX_TEXT_BYTES)
-            : substr($clean, 0, self::MAX_TEXT_BYTES);
+            ? mb_strcut($value, 0, $bytes)
+            : substr($value, 0, $bytes);
     }
 
     /**
