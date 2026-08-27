@@ -449,8 +449,8 @@
                 </div>
 
                 <?php if ($telemetry_log) { ?>
-                <div data-paypercut-log style="margin-top: 20px;">
-                  <h5><?php echo sprintf($text_telemetry_log_summary, count($telemetry_log)); ?></h5>
+                <details data-paypercut-log style="margin-top: 20px;">
+                  <summary><?php echo sprintf($text_telemetry_log_summary, count($telemetry_log)); ?></summary>
                   <p class="help-block"><?php echo sprintf($text_telemetry_log_help, (int)$telemetry_log_max); ?></p>
                   <div style="max-height: 320px; overflow: auto;">
                     <table class="table table-condensed table-striped">
@@ -474,7 +474,7 @@
                   </div>
                   <p><a href="#" onclick="$('#paypercut-debug-raw').toggle(); return false;"><?php echo $text_telemetry_log_raw; ?></a></p>
                   <pre id="paypercut-debug-raw" style="display:none; max-height: 320px; overflow: auto;"><?php echo htmlspecialchars($telemetry_log_raw, ENT_QUOTES, 'UTF-8'); ?></pre>
-                </div>
+                </details>
                 <?php } ?>
               </div>
             </div>
