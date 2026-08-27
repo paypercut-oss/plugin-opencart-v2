@@ -249,7 +249,9 @@ Four things enforce that, in order:
    Comparison against the store's own credentials is
    **position-independent** — any 8-byte slice of one, anywhere in a value —
    because an upstream error quoting the middle of the api key used to travel
-   untouched. A tripped assertion **drops the whole event**, not the offending
+   untouched, and a full `sk_live_`-style prefix over a real key body is
+   screened without a word boundary, because a credential glued to a preceding
+   word used to slip past. A tripped assertion **drops the whole event**, not the offending
    field: an event assembled wrongly cannot be trusted in its other parts
    either. Only the event *name* is audit-logged.
 

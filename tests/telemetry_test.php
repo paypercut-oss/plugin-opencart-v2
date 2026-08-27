@@ -138,8 +138,14 @@ foreach (array('ppc_abc123', 'sk_test_abc', 'pk_live_abc', 'whsec_abc', 'eyJhbGc
 ok(PaypercutEvent::isDenied(array('note' => 'rejected ppc_live_store_secret')), 'denies a credential mid-string');
 
 // ...but not so loosely that ordinary prose loses the whole event.
-foreach (array('disk_usage exceeded', 'backpack_pk_none missing', 'risk_free window elapsed') as $permitted) {
+foreach (array('disk_usage exceeded', 'backpack_pk_none missing', 'risk_free window elapsed', 'brisk_test_run started', 'whisk_test_ok') as $permitted) {
     ok(!PaypercutEvent::isDenied(array('note' => $permitted)), 'permits ' . $permitted);
+}
+
+// A full `sk_live_` prefix over a real key body is specific enough to need no
+// boundary - a credential glued to a preceding word used to slip past.
+foreach (array('xxxsk_live_51AbCdEfGhIjKlMnOp', 'xxxppc_live_A1b2C3d4E5f6G7h8', 'xxxwhsec_ABCDEFGH1234') as $glued) {
+    ok(PaypercutEvent::isDenied(array('note' => $glued)), 'denies a credential glued to a preceding word: ' . $glued);
 }
 
 // 3. Card numbers, Luhn-checked, anywhere in the value.
@@ -321,7 +327,9 @@ ok(PaypercutEvent::isEnvelopeDenied($correlated), 'denies a credential and a PAN
 
 // Clamping runs before the assertion, so a credential starting near the byte
 // cap reaches the wire as a prefix that a whole-secret comparison cannot see.
-$boundary_secret = 'ppc_live_' . str_repeat('z', 40);
+// An opaque credential in a format no shape rule anticipates - which is the
+// case the literal comparison exists for.
+$boundary_secret = 'AKIA' . str_repeat('Z', 36);
 $clamped = PaypercutEvent::of('checkout.session_create_failed', array(
     'note' => str_repeat('a', 250) . $boundary_secret
 ))->envelope(0);

@@ -73,9 +73,12 @@ class PaypercutEvent
      * Not anchored to the start of the string, because a stack frame or an HTTP
      * error carries the credential mid-string every time. Not left unanchored
      * either: bare sk_/pk_ also matches `disk_usage` and `risk_free`, and a
-     * tripped assertion bins the whole event.
+     * tripped assertion bins the whole event. A full `sk_live_`-style prefix
+     * is specific enough to need no boundary, which is how a credential glued
+     * to a preceding word used to slip past; the key body has to be long
+     * enough to be one, or `brisk_test_run` matches.
      */
-    private static $denied_value_pattern = '/(?:^|[^A-Za-z0-9_])(ppc_|sk_|pk_|whsec_|eyJ[A-Za-z0-9_-]+\.)/i';
+    private static $denied_value_pattern = '/(?:^|[^A-Za-z0-9_])(?:ppc_|sk_|pk_|whsec_|eyJ[A-Za-z0-9_-]+\.)|(?:ppc|sk|pk)_(?:live|test|sandbox)_[A-Za-z0-9]{8,}|whsec_[A-Za-z0-9]{8,}/i';
 
     /**
      * Assigned issuer prefixes with the lengths each brand actually issues.
