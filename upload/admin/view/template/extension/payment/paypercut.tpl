@@ -698,9 +698,19 @@ function deleteWebhook() {
 
     var token = panel.getAttribute('data-token');
     var pollSeconds = parseInt(panel.getAttribute('data-poll-seconds'), 10) || 60;
+    // Every field render() writes, not just the two the countdown needs: it
+    // runs once at load, and anything missing here overwrites the value the
+    // template just rendered with a blank. The session id is the one number
+    // support asks the merchant to quote.
     var state = {
         state: panel.getAttribute('data-state'),
-        expires_at: parseInt(panel.getAttribute('data-expires-at'), 10) || 0
+        session_id: <?php echo json_encode($telemetry_state['session_id']); ?>,
+        expires_at: parseInt(panel.getAttribute('data-expires-at'), 10) || 0,
+        events_sent: <?php echo (int)$telemetry_state['events_sent']; ?>,
+        events_dropped: <?php echo (int)$telemetry_state['events_dropped']; ?>,
+        started_by_name: <?php echo json_encode($telemetry_state['started_by_name']); ?>,
+        message: <?php echo json_encode(isset($telemetry_state['message']) ? $telemetry_state['message'] : ''); ?>,
+        trace_id: <?php echo json_encode(isset($telemetry_state['trace_id']) ? $telemetry_state['trace_id'] : ''); ?>
     };
 
     var pollTimer = null;
