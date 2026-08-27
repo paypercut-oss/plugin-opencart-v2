@@ -198,7 +198,11 @@ foreach (array('4111111111111111', '5555555555554444', '378282246310005') as $pa
 ok(!PaypercutEvent::isDenied(array('amount' => 12999, 'total' => 129.99, 'ok' => true, 'ts' => 1787250271)), 'ordinary scalars still ship');
 
 // 3c. Group separators: a PAN is a PAN however the renderer joined its groups.
-foreach (array('.', '/', '_', ',', ', ', ' ', '-', ' - ') as $separator) {
+// The multi-byte forms are what a word processor, a spreadsheet or a chat
+// client substitutes on its own: each is wider than one byte, so it ended
+// the digit run and every four-digit group was screened alone.
+foreach (array('.', '/', '_', ',', ', ', ' ', '-', ' - ',
+    "\xC2\xA0", "\xE2\x80\x93", "\xE2\x80\x94", "\xE2\x80\xAF", "\xE2\x88\x92") as $separator) {
     $spaced = implode($separator, str_split('4111111111111111', 4));
     ok(PaypercutEvent::isDenied(array('note' => 'card ' . $spaced . ' declined')), 'denies a PAN separated by ' . json_encode($separator));
 }
