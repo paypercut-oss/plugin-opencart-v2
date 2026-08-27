@@ -177,6 +177,37 @@ foreach (array('1234567890123456', '1787250271000', '1787250271000000000', '9988
     ok(!PaypercutEvent::containsCardNumber($permitted), 'permits the digit run ' . $permitted);
 }
 
+// 3a. Screening only pre-existing strings let a PAN through as a non-string
+// scalar: 4111111111111111 fits in a 64-bit int, and (string) renders a float
+// through `precision` while json_encode puts all sixteen digits back.
+foreach (array('4111111111111111', '5555555555554444', '378282246310005') as $pan) {
+    foreach (array('int' => (int)$pan, 'float' => (float)$pan) as $type => $scalar) {
+        ok(
+            PaypercutEvent::isEnvelopeDenied(PaypercutEvent::of('checkout.started', array('detail' => $scalar))->envelope(0), $secrets),
+            'denies a PAN passed as an ' . $type
+        );
+    }
+}
+
+ok(!PaypercutEvent::isDenied(array('amount' => 12999, 'total' => 129.99, 'ok' => true, 'ts' => 1787250271)), 'ordinary scalars still ship');
+
+// 3c. Group separators: a PAN is a PAN however the renderer joined its groups.
+foreach (array('.', '/', '_', ',', ', ', ' ', '-', ' - ') as $separator) {
+    $spaced = implode($separator, str_split('4111111111111111', 4));
+    ok(PaypercutEvent::isDenied(array('note' => 'card ' . $spaced . ' declined')), 'denies a PAN separated by ' . json_encode($separator));
+}
+
+// 3d. Issuer gating covers the schemes outside MII 3-6 that actually issue.
+foreach (array('Troy' => '9792444444444445', 'UzCard' => '8600444444444449', 'Humo' => '9860444444444442', 'RuPay 81' => '8171444444444448') as $brand => $pan) {
+    ok(PaypercutEvent::containsCardNumber(str_repeat('7', 40) . $pan), 'finds a padded ' . $brand . ' PAN');
+}
+
+// ...and a millisecond timestamp is not a card, which Luhn alone denied ~10%
+// of the time.
+foreach (array('1787250271000', '1787250271483', '1600000000123', '1899999999999') as $milliseconds) {
+    ok(!PaypercutEvent::containsCardNumber($milliseconds), 'permits the millisecond timestamp ' . $milliseconds);
+}
+
 // 3b. Keys are serialised exactly as values are, so the value rules screen
 // them too - the name-shape regex alone let a PAN or a credential travel in
 // key position. Digits-only keys arrive as ints; the screen must still see them.
@@ -198,6 +229,17 @@ ok(!PaypercutEvent::isDenied(array('note' => 'nothing to see'), $secrets), 'perm
 
 // An empty secret would match every string.
 ok(!PaypercutEvent::isDenied(array('note' => 'clean'), array('', null)), 'an empty secret does not match everything');
+
+// The comparison is position-independent: an upstream error quoting the MIDDLE
+// of the api key carries no prefix for a head-anchored rule to catch.
+foreach (array(0, 4, 8, 12) as $offset) {
+    ok(
+        PaypercutEvent::isDenied(array('note' => 'upstream rejected xx' . substr('sk_live_realstoresecret', $offset, 10) . 'yy'), $secrets),
+        'denies a slice of a stored secret at offset ' . $offset
+    );
+}
+
+ok(PaypercutEvent::isDenied(array('note' => 'xxxsk_live_realstoresecret'), $secrets), 'denies a stored secret glued to a preceding word');
 
 // 5. Recursion, exactly two levels deep - the contract nests `error.stack`.
 ok(
@@ -337,7 +379,7 @@ foreach (array('2418', '1', '104857', 'pi_3PabcDEF1234567890', 'cs_live_a1B2c3D4
     same($id, $envelope['payment_intent_id'], 'a real payment_intent_id survives intact: ' . $id);
 }
 
-foreach (array('<script>x</script>', 'https://evil.example/a?b=c', "0'; DROP--", 'two words', "\xE2\x80\xAEtxet", str_repeat('A', 200)) as $hostile) {
+foreach (array('<script>x</script>', 'https://evil.example/a?b=c', "0'; DROP--", 'two words', "\xE2\x80\xAEtxet", str_repeat('A', 200), '../../etc/passwd', '..', '.', '....') as $hostile) {
     $envelope = PaypercutEvent::of('webhook.received')->about(array(
         'payment_intent_id' => $hostile,
         'payment_id' => $hostile,
@@ -404,6 +446,50 @@ $rendered = json_encode($chunk['attrs']);
 foreach (array_keys($inventory) as $code) {
     ok(strpos($rendered, $code) !== false, 'the inventory still names ' . $code);
 }
+
+// An extension code is merchant data in key position, not a field name this
+// extension chose. A realistic OpenCart inventory carries codes that read like
+// credential fields; every one keeps its OWN key and its version.
+$slugs = array(
+    'payment.authorizenet_aim' => '1.0',
+    'payment.authorizenet_sim' => '1.0',
+    'module.nonce_helper' => '2.1',
+    'module.token_ring' => '1.4',
+    'module.secret_santa' => '3.0',
+    'module.oauth_bridge' => '1.1',
+    'module.api_keychain' => '1.0',
+    'module.password_helper' => '1.0',
+    'payment.cod' => '1.0',
+    'shipping.flat' => '1.0'
+);
+
+$slug_chunk = PaypercutEvent::environmentPlugins($slugs);
+$slug_envelope = $slug_chunk[0]->envelope(0);
+
+ok(!PaypercutEvent::isEnvelopeDenied($slug_envelope, $secrets), 'a credential-shaped inventory survives the deny assertion');
+
+foreach ($slugs as $code => $version) {
+    ok(
+        isset($slug_envelope['attrs'][$code]) && $slug_envelope['attrs'][$code] === $version,
+        'the inventory keeps ' . $code . ' under its own key'
+    );
+}
+
+// ...but a code that is a PAN or a credential is still dropped on its own.
+$poisoned = PaypercutEvent::environmentPlugins(array(
+    'payment.cod' => '1.0',
+    '4111111111111111' => '1.0',
+    'sk_live_realstoresecret' => '1.0'
+));
+$poisoned_envelope = $poisoned[0]->envelope(0);
+
+ok(!PaypercutEvent::isEnvelopeDenied($poisoned_envelope, $secrets), 'a poisoned code does not bin the chunk');
+ok(isset($poisoned_envelope['attrs']['payment.cod']), 'the clean code beside it still ships');
+same(
+    false,
+    strpos(json_encode($poisoned_envelope['attrs']), '4111111111111111') !== false,
+    'a PAN in code position never reaches the wire'
+);
 
 $many = array();
 

@@ -232,13 +232,32 @@ Four things enforce that, in order:
    `isEnvelopeDenied()` takes the envelope whole and any field added to
    `envelope()` is covered by construction. **Keys are screened by the value
    rules too**, not only by the name-shape regex — a key is serialised exactly
-   as a value is, and PHP turns a digits-only key into an int on the way in. The
-   PAN check slides a 13–19 digit window across a digit run (a PAN with other
-   digits pressed against it is still a PAN); a window inside a longer run must
-   also carry an issuer prefix, or one long order id in ten would be denied on
-   arithmetic alone. A tripped assertion **drops the whole event**, not the
-   offending field: an event assembled wrongly cannot be trusted in its other
-   parts either. Only the event *name* is audit-logged.
+   as a value is, and PHP turns a digits-only key into an int on the way in.
+   **Every scalar is screened in its wire form**, not only the values that
+   arrived as strings — `4111111111111111` fits in a 64-bit int, and a float
+   casts to `4.1111111111111E+15` through `precision` while `json_encode` puts
+   all sixteen digits back. The PAN check slides a 13–19 digit window across a
+   digit run (a PAN with other digits pressed against it is still a PAN), joins
+   groups across ` `, `-`, `.`, `,`, `_`, `/` and tab, and gates **every**
+   candidate — the run taken whole included — on an **assigned issuer prefix**
+   at a length that brand issues. Luhn alone passes one random run in ten and a
+   sliding window multiplies that: screening on Luhn alone denied 24.9% of
+   random 16-digit identifiers and 9.7% of 13-digit millisecond timestamps,
+   against 8.0% and 0.0% once gated. The gate covers Visa, Mastercard, Mir,
+   Amex, Diners, JCB, Discover, UnionPay, Maestro, RuPay, Troy, UzCard and
+   Humo; MII 0/1/7 and the unassigned parts of 8/9 are the deliberate gap.
+   Comparison against the store's own credentials is
+   **position-independent** — any 8-byte slice of one, anywhere in a value —
+   because an upstream error quoting the middle of the api key used to travel
+   untouched. A tripped assertion **drops the whole event**, not the offending
+   field: an event assembled wrongly cannot be trusted in its other parts
+   either. Only the event *name* is audit-logged.
+
+   The one exception is `environment.plugins`: an extension **code** is
+   merchant data sitting in key position, not a field name this extension
+   chose, so the name-shape rule does not apply to it — `payment.authorizenet_aim`
+   and `module.nonce_helper` are exactly the inventory support compares against
+   a working store. Both halves are still screened by every value rule.
 3. **"Our text yes, upstream text no."** No exception message ever travels:
    `PaypercutEvent::failure()` takes an exception's type and `file:line` stack
    and discards its message, and `apiFailure()` never reads the platform's
@@ -259,10 +278,12 @@ Four things enforce that, in order:
    value when it trips, because 15 of 16 PAN digits is not redaction — Luhn
    completes the sixteenth uniquely. The three correlation ids
    (`payment_intent_id`, `payment_id`, `order_ref`) are bounded to an identifier
-   charset rather than free text, because they are the only wire values fed
-   straight from an upstream payload and the webhook feeding two of them is
-   unauthenticated; lossless here, since `orderRef()` returns the bare order id.
-   A correlation id that does not fit drops the **field**, never the event.
+   charset (`A-Za-z0-9_.:-`, at least one alphanumeric, no `..` run) rather than
+   free text, because they are the only wire values fed straight from an
+   upstream payload and the webhook feeding two of them is unauthenticated;
+   lossless here, since `orderRef()` returns the bare order id and every other
+   id is a `pi_`/`cs_`/`pay_` handle. A correlation id that does not fit drops
+   the **field**, never the event.
 
 `PaypercutTelemetrySession::credentials()` enumerates
 `paypercut_api_key`, `paypercut_webhook_secret` and the live telemetry token.

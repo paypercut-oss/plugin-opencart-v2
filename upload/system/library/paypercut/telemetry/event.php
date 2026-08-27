@@ -37,6 +37,13 @@ class PaypercutEvent
     const MIN_SECRET_FRAGMENT = 4;
 
     /**
+     * Shortest slice of a credential looked for ANYWHERE in a value. Longer
+     * than MIN_SECRET_FRAGMENT because that rule is confined to the clamp
+     * boundary while this one runs over ordinary prose. See carriesSecret().
+     */
+    const MIN_SECRET_SLICE = 8;
+
+    /**
      * How far past MAX_TEXT_BYTES text() screens before it clamps.
      *
      * Wide enough for the longest thing the screen recognises (a 19-digit PAN
@@ -52,8 +59,13 @@ class PaypercutEvent
 
     /**
      * Field names that must never appear in an event, whatever their value.
+     *
+     * `auth`, `nonce` and `api_key` are anchored to alphanumeric boundaries:
+     * as bare substrings they also matched the stock extension codes
+     * `payment.authorizenet_aim`/`_sim`, and a merchant's inventory is data,
+     * not a field name this extension chose.
      */
-    private static $denied_key_pattern = '/secret|token|password|credential|nonce|auth|_key$/i';
+    private static $denied_key_pattern = '/secret|token|password|passphrase|credential|authorization|authenticat|(?<![a-z0-9])(?:auth|nonce|api[_-]?key)(?![a-z0-9])|_key$/i';
 
     /**
      * Value shapes that must never appear in an event, whatever their field name.
@@ -66,10 +78,37 @@ class PaypercutEvent
     private static $denied_value_pattern = '/(?:^|[^A-Za-z0-9_])(ppc_|sk_|pk_|whsec_|eyJ[A-Za-z0-9_-]+\.)/i';
 
     /**
-     * Issuer ranges and lengths of the card brands, used only when testing a
-     * WINDOW inside a longer digit run. See containsCardNumber().
+     * Assigned issuer prefixes with the lengths each brand actually issues.
+     *
+     * Every candidate is gated on this BEFORE Luhn, the run taken whole
+     * included: Luhn alone passes one run in ten and a sliding window
+     * multiplies that, denying 24.9% of random 16-digit identifiers and 9.7%
+     * of 13-digit millisecond timestamps against 8.0% and 0.0% once gated. The
+     * trade is MII 0/1/7 and the unassigned parts of 8/9.
      */
-    private static $card_brand_pattern = '/^(?:4\d{12}(?:\d{3})?(?:\d{3})?|5[1-5]\d{14}|5[06-8]\d{10,17}|2(?:2[2-9]\d|[3-6]\d{2}|7[01]\d|720)\d{12}|220[0-4]\d{12}|3[47]\d{13}|3(?:0[0-5]|[68]\d)\d{11}|35\d{14,17}|6\d{11,18})\z/D';
+    private static $card_brand_pattern = '/^(?:'
+        // Visa 13/16/19; Mastercard 51-55 and 2221-2720; Mir 2200-2204
+        . '4\d{12}|4\d{15}|4\d{18}'
+        . '|5[1-5]\d{14}'
+        . '|(?:222[1-9]|22[3-9]\d|2[3-6]\d{2}|27[01]\d|2720)\d{12}'
+        . '|220[0-4]\d{12}'
+        // Amex 15; Diners 14; JCB 3528-3589
+        . '|3[47]\d{13}'
+        . '|3(?:0[0-5]|[689]\d)\d{11}'
+        . '|35(?:2[89]|[3-8]\d)\d{12,15}'
+        // Discover 6011 / 622126-622925 / 644-649 / 65; UnionPay 62 and 81
+        . '|6011\d{12,15}'
+        . '|622(?:12[6-9]|1[3-9]\d|[2-8]\d{2}|9[01]\d|92[0-5])\d{10,13}'
+        . '|64[4-9]\d{13,16}'
+        . '|65\d{14,17}'
+        . '|62\d{14,17}'
+        . '|81\d{14,17}'
+        // Maestro's published BIN list; RuPay 60/82/508
+        . '|(?:5018|5020|5038|5893|6304|6759|676[1-3])\d{8,15}'
+        . '|60\d{14}|82\d{14}|508\d{13}'
+        // Troy, UzCard and Humo - live schemes in TR/UZ, outside MII 3-6
+        . '|9792\d{12}|8600\d{12}|9860\d{12}'
+        . ')\z/D';
 
     /**
      * Host and platform versions. Read by environmentSnapshot().
@@ -378,9 +417,16 @@ class PaypercutEvent
      */
     public static function correlationId($value)
     {
-        return preg_match('/^[A-Za-z0-9_.:-]{1,' . self::MAX_CORRELATION_BYTES . '}\z/D', (string)$value)
-            ? (string)$value
-            : '';
+        $value = (string)$value;
+
+        if (!preg_match('/^[A-Za-z0-9_.:-]{1,' . self::MAX_CORRELATION_BYTES . '}\z/D', $value)) {
+            return '';
+        }
+
+        // A handle always carries an alphanumeric and never a '..' run; the
+        // charset alone admitted '..' and '.', which land verbatim in
+        // order_ref and read as path segments wherever the id is echoed.
+        return preg_match('/[A-Za-z0-9]/', $value) && strpos($value, '..') === false ? $value : '';
     }
 
     /**
@@ -544,7 +590,6 @@ class PaypercutEvent
         $total = count($plugins);
         $chunks = array_chunk($plugins, self::MAX_ATTRS - 2, true);
         $events = array();
-        $position = 0;
 
         foreach ($chunks as $index => $chunk) {
             $fields = array(
@@ -553,7 +598,6 @@ class PaypercutEvent
             );
 
             foreach ($chunk as $code => $version) {
-                $position++;
                 $key = self::text((string)$code);
                 $release = self::text((string)$version);
 
@@ -562,19 +606,6 @@ class PaypercutEvent
                 // on its own rather than binning the chunk around it;
                 // plugin_count still reports the true total.
                 if ($key === '' || self::isDeniedValue($key) || self::isDeniedValue($release)) {
-                    continue;
-                }
-
-                // An extension code is data, not a field name we chose: stock
-                // codes like payment.authorizenet_aim match the denied-key
-                // pattern, which would bin the whole inventory chunk.
-                if (self::isDeniedKey($key)) {
-                    $moved = self::text($key . ' ' . $release);
-
-                    if (!self::isDeniedValue($moved)) {
-                        $fields['extension_' . $position] = $moved;
-                    }
-
                     continue;
                 }
 
@@ -708,6 +739,26 @@ class PaypercutEvent
      */
     public static function isEnvelopeDenied($envelope, $secrets = array())
     {
+        // An extension code is merchant data in key position, not a field name
+        // this extension chose, so the name-shape rule does not apply to it -
+        // `module.nonce_helper` is the inventory a conflict gets named in.
+        // Every VALUE rule still screens both halves.
+        $inventory = isset($envelope['event'])
+            && $envelope['event'] === 'environment.plugins'
+            && isset($envelope['attrs'])
+            && is_array($envelope['attrs']);
+
+        if ($inventory) {
+            $attrs = $envelope['attrs'];
+            unset($envelope['attrs']);
+
+            foreach ($attrs as $code => $release) {
+                if (self::isDeniedValue((string)$code, $secrets) || self::isDeniedValue($release, $secrets)) {
+                    return true;
+                }
+            }
+        }
+
         return self::isDenied($envelope, $secrets);
     }
 
@@ -763,7 +814,13 @@ class PaypercutEvent
      */
     private static function isDeniedValue($value, $secrets = array())
     {
-        if (!is_string($value) || $value === '') {
+        // A float holds no PAN above 2^53 exactly, so one arriving as a float
+        // fails Luhn while still carrying 15 correct digits, which Luhn
+        // completes. The issuer prefix alone is the screen there.
+        $imprecise = is_float($value);
+        $value = self::wireText($value);
+
+        if ($value === '') {
             return false;
         }
 
@@ -771,7 +828,7 @@ class PaypercutEvent
             return true;
         }
 
-        if (self::containsCardNumber($value)) {
+        if (self::scanDigits($value, !$imprecise)) {
             return true;
         }
 
@@ -783,7 +840,63 @@ class PaypercutEvent
                 continue;
             }
 
-            if (strpos($value, $secret) !== false || self::endsMidSecret($value, $secret)) {
+            if (self::carriesSecret($value, $secret)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * The exact string a scalar occupies once the envelope is serialised.
+     *
+     * Screening only pre-existing strings let a PAN through as a non-string
+     * scalar: 4111111111111111 fits in a 64-bit int, and a float casts to
+     * "4.1111111111111E+15" through `precision` while json_encode - the thing
+     * that actually reaches the wire - puts all sixteen digits back.
+     */
+    private static function wireText($value)
+    {
+        if (is_string($value)) {
+            return $value;
+        }
+
+        if (is_int($value)) {
+            return (string)$value;
+        }
+
+        if (is_float($value)) {
+            $json = json_encode($value);
+
+            return is_string($json) ? $json : (string)$value;
+        }
+
+        // A bool and a null render as true/false/null and can carry nothing.
+        return '';
+    }
+
+    /**
+     * Does this value carry the store's credential, whole or in part?
+     *
+     * The slice scan is position-independent on purpose: endsMidSecret() only
+     * recognises a credential the clamp cut, so a MIDDLE slice - what an
+     * upstream error quoting part of the key produces - travelled untouched.
+     */
+    private static function carriesSecret($value, $secret)
+    {
+        if (strpos($value, $secret) !== false || self::endsMidSecret($value, $secret)) {
+            return true;
+        }
+
+        $length = strlen($secret);
+
+        if ($length <= self::MIN_SECRET_SLICE) {
+            return false;
+        }
+
+        for ($start = 0; $start + self::MIN_SECRET_SLICE <= $length; $start++) {
+            if (strpos($value, substr($secret, $start, self::MIN_SECRET_SLICE)) !== false) {
                 return true;
             }
         }
@@ -826,7 +939,7 @@ class PaypercutEvent
     }
 
     /**
-     * A Luhn-valid 13-19 digit run anywhere in the value.
+     * An issuer-prefixed, Luhn-valid 13-19 digit run anywhere in the value.
      *
      * The edge screens for a PAN too, but only when the whole value is one:
      * "Card 4111111111111111 was declined" passes it. Card data must never
@@ -834,7 +947,18 @@ class PaypercutEvent
      */
     public static function containsCardNumber($value)
     {
-        if (!preg_match_all('/\d(?:[ -]?\d)+/', (string)$value, $matches)) {
+        return self::scanDigits(self::wireText($value), true);
+    }
+
+    /**
+     * @param bool $require_luhn False screens on the issuer prefix alone.
+     */
+    private static function scanDigits($value, $require_luhn)
+    {
+        // Group separators, not just space and hyphen: '4111.1111.1111.1111',
+        // '4111/1111/1111/1111', '4111_1111_1111_1111' and the comma-separated
+        // forms an API error or a log line renders all read back as one PAN.
+        if (!preg_match_all('/\d(?:[ \t.,\-_\/]{0,3}\d)+/', $value, $matches)) {
             return false;
         }
 
@@ -842,25 +966,20 @@ class PaypercutEvent
             $digits = (string)preg_replace('/\D/', '', $candidate);
             $length = strlen($digits);
 
-            // The run taken whole: Luhn alone, whatever the issuer.
-            if (self::luhnValid($digits)) {
-                return true;
-            }
-
-            // Then every 13-19 digit WINDOW inside a longer run: a PAN with
-            // other digits pressed against it is still a PAN, and anchoring to
-            // the run let `77...774111111111111111` through. Windows also have
-            // to look like a card - Luhn alone passes one run in ten, and a
-            // 19-digit order id would be denied half the time on arithmetic.
+            // Every 13-19 digit window, the run taken whole included: a PAN
+            // with other digits pressed against it is still a PAN, and
+            // anchoring to the run let `77...774111111111111111` through.
+            // Every window is gated on an assigned issuer prefix first - see
+            // $card_brand_pattern for why Luhn alone is not a screen.
             for ($start = 0; $start + 13 <= $length; $start++) {
                 for ($size = 13; $size <= 19 && $start + $size <= $length; $size++) {
-                    if ($start === 0 && $size === $length) {
+                    $window = substr($digits, $start, $size);
+
+                    if (!preg_match(self::$card_brand_pattern, $window)) {
                         continue;
                     }
 
-                    $window = substr($digits, $start, $size);
-
-                    if (preg_match(self::$card_brand_pattern, $window) && self::luhnValid($window)) {
+                    if (!$require_luhn || self::luhnValid($window)) {
                         return true;
                     }
                 }
