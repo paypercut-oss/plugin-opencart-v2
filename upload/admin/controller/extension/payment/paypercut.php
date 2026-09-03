@@ -994,7 +994,8 @@ class ControllerExtensionPaymentPaypercut extends Controller
             'text_telemetry_starting', 'text_telemetry_stopping', 'text_telemetry_session_ended',
             'text_telemetry_network_error', 'text_telemetry_admin_unreachable',
             'button_telemetry_start', 'button_telemetry_start_confirm',
-            'button_telemetry_stop', 'button_telemetry_retry', 'button_telemetry_copy'
+            'button_telemetry_stop', 'button_telemetry_retry', 'button_telemetry_copy',
+            'button_telemetry_copy_json'
         ) as $key) {
             $strings[$key] = $this->language->get($key);
         }

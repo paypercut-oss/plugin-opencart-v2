@@ -126,6 +126,7 @@ $_['button_telemetry_start_confirm'] = 'Start session';
 $_['button_telemetry_stop'] = 'Stop now';
 $_['button_telemetry_retry'] = 'Try again';
 $_['button_telemetry_copy'] = 'Copy';
+$_['button_telemetry_copy_json'] = 'Copy JSON';
 $_['text_telemetry_copied'] = 'Copied';
 $_['text_telemetry_starting'] = 'Starting...';
 $_['text_telemetry_stopping'] = 'Stopping...';

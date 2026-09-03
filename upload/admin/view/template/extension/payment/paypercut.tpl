@@ -472,7 +472,10 @@
                       </tbody>
                     </table>
                   </div>
-                  <p><a href="#" onclick="$('#paypercut-debug-raw').toggle(); return false;"><?php echo $text_telemetry_log_raw; ?></a></p>
+                  <p>
+                    <a href="#" onclick="$('#paypercut-debug-raw').toggle(); return false;"><?php echo $text_telemetry_log_raw; ?></a>
+                    <button type="button" class="btn btn-link btn-xs" data-paypercut-copy data-paypercut-copy-target="#paypercut-debug-raw"><?php echo $button_telemetry_copy_json; ?></button>
+                  </p>
                   <pre id="paypercut-debug-raw" style="display:none; max-height: 320px; overflow: auto;"><?php echo htmlspecialchars($telemetry_log_raw, ENT_QUOTES, 'UTF-8'); ?></pre>
                 </details>
                 <?php } ?>
@@ -938,10 +941,14 @@ function deleteWebhook() {
     $(panel).on('click', '[data-paypercut-copy]', function (event) {
         event.preventDefault();
 
-        // Two rows offer a Copy button - the session id and the support
-        // reference - so copy the code beside this one, not the first on screen.
+        // Several controls offer a Copy button - the session id, the support
+        // reference, the raw log - so copy what this one points at, not the
+        // first code element on screen.
+        var target = this.getAttribute('data-paypercut-copy-target');
         var row = $(this).closest('p');
-        var node = row.find('code')[0] || panel.querySelector('[data-paypercut-session-id]');
+        var node = target
+            ? panel.querySelector(target)
+            : row.find('code')[0] || panel.querySelector('[data-paypercut-session-id]');
         var value = node ? node.textContent : '';
 
         if (!value) { return; }
