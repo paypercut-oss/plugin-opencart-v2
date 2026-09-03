@@ -129,6 +129,13 @@ foreach (array('api_client_secret', 'telemetry_token', 'api_key', 'nonce', 'auth
 
 ok(PaypercutEvent::isDenied(array('error' => array('stack' => array('secret' => 'x')))), 'denies a nested key two levels down');
 
+// ...but a name that merely CONTAINS one is this extension's own vocabulary.
+// api_key_mode used to trip the screen, and a tripped assertion bins the whole
+// event — so environment.configuration never left an OpenCart 2 store.
+foreach (array('api_key_mode', 'webhook_configured', 'connection_environment', 'payment_method_config_set') as $key) {
+    ok(!PaypercutEvent::isDenied(array($key => 'test')), 'keeps our own attribute ' . $key);
+}
+
 // 2. Denied value shapes, whatever the field name.
 foreach (array('ppc_abc123', 'sk_test_abc', 'pk_live_abc', 'whsec_abc', 'eyJhbGciOiJSUzI1NiJ9.payload') as $value) {
     ok(PaypercutEvent::isDenied(array('note' => $value)), 'denies value shape ' . $value);

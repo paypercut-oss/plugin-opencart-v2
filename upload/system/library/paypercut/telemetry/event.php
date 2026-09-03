@@ -90,12 +90,17 @@ class PaypercutEvent
     /**
      * Field names that must never appear in an event, whatever their value.
      *
-     * `auth`, `nonce` and `api_key` are anchored to alphanumeric boundaries:
-     * as bare substrings they also matched the stock extension codes
+     * `auth` and `nonce` are anchored to alphanumeric boundaries: as bare
+     * substrings they also matched the stock extension codes
      * `payment.authorizenet_aim`/`_sim`, and a merchant's inventory is data,
      * not a field name this extension chose.
+     *
+     * A key name is credential-shaped only when it ENDS in one, matching the
+     * other ports. Anchored mid-name it also denied this extension's own
+     * `api_key_mode`, and a tripped assertion bins the whole event — so the
+     * configuration snapshot never left an OpenCart 2 store at all.
      */
-    private static $denied_key_pattern = '/secret|token|password|passphrase|credential|authorization|authenticat|(?<![a-z0-9])(?:auth|nonce|api[_-]?key)(?![a-z0-9])|_key$/i';
+    private static $denied_key_pattern = '/secret|token|password|passphrase|credential|authorization|authenticat|(?<![a-z0-9])(?:auth|nonce)(?![a-z0-9])|api[_-]?keys?$|_keys?$/i';
 
     /**
      * Value shapes that must never appear in an event, whatever their field name.
