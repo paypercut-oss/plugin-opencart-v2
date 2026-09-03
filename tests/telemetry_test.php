@@ -117,6 +117,25 @@ same(
 same('https://telemetry.dev.paypercut.net/', PaypercutEnvironment::allowedPaypercutBase('https://telemetry.dev.paypercut.net/'), 'accepts a paypercut.net subdomain');
 
 // ---------------------------------------------------------------------------
+// The extension inventory: a name is only useful if it survives the edge.
+// ---------------------------------------------------------------------------
+
+// The edge discards an attribute whose value is empty, key and all, so an
+// unversioned extension used to arrive as no extension at all.
+ok(PaypercutActiveExtensions::UNKNOWN_VERSION !== '', 'the unknown-version placeholder is not empty');
+
+$inventory = PaypercutEvent::environmentPlugins(array(
+    'payment.paypercut' => PaypercutActiveExtensions::UNKNOWN_VERSION,
+    'ocmod.somemod' => '1.2.3',
+));
+
+$envelope = $inventory[0]->envelope(1788000000);
+$attrs = isset($envelope['attrs']) ? $envelope['attrs'] : array();
+
+ok(isset($attrs['payment.paypercut']) && $attrs['payment.paypercut'] !== '', 'an unversioned extension keeps its code');
+ok(isset($attrs['ocmod.somemod']) && $attrs['ocmod.somemod'] === '1.2.3', 'a versioned extension keeps its version');
+
+// ---------------------------------------------------------------------------
 // The deny assertion: a tripped rule drops the WHOLE event.
 // ---------------------------------------------------------------------------
 

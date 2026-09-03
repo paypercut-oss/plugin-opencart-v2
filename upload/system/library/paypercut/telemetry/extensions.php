@@ -4,9 +4,19 @@
  *
  * Codes and versions only. An extension's code is what OpenCart routes it under
  * and is public; its author and path are not needed to reproduce a conflict.
+ *
+ * A version is never an empty string: the edge discards an attribute whose
+ * value is empty, and it discards the key with it, so an unversioned extension
+ * used to arrive as no extension at all — which is the one thing this event
+ * exists to name.
  */
 class PaypercutActiveExtensions
 {
+    /**
+     * Stands in for a version OpenCart never recorded.
+     */
+    const UNKNOWN_VERSION = 'unknown';
+
     private static $registry = null;
 
     public static function boot($registry)
@@ -34,8 +44,8 @@ class PaypercutActiveExtensions
             if ($code !== '') {
                 // OpenCart does not record a version per extension; the modified
                 // file list is the closest thing, and it is not per-extension
-                // either. An empty version still names the conflict candidate.
-                $extensions[$code] = '';
+                // either. The code alone still names the conflict candidate.
+                $extensions[$code] = self::UNKNOWN_VERSION;
             }
         }
 
@@ -47,7 +57,8 @@ class PaypercutActiveExtensions
             $code = PaypercutEvent::identifier('ocmod.' . (string)$row['code']);
 
             if ($code !== '') {
-                $extensions[$code] = (string)$row['version'];
+                $version = PaypercutEvent::text((string)$row['version']);
+                $extensions[$code] = $version === '' ? self::UNKNOWN_VERSION : $version;
             }
         }
 
