@@ -1473,6 +1473,20 @@ class ControllerExtensionPaymentPaypercut extends Controller
             return;
         }
 
+        // Support asks a merchant to start a session and reproduce the problem.
+        // They leave for the storefront to do that, where nothing delivers, so
+        // the events from the reproduction wait for them to find their way back
+        // to the extension's own screen — and expire with the session if they
+        // never do. This event renders on every admin page, so delivery rides
+        // along with the notice. Bounded to one batch: the panel's poll drains
+        // the rest, and a shopper must never wait on a call to Paypercut.
+        PaypercutTelemetrySession::reap();
+
+        if (PaypercutTelemetrySession::isActiveFast() && PaypercutEventQueue::size() > 0) {
+            $flusher = new PaypercutFlusher();
+            $flusher->flushOnce();
+        }
+
         $this->load->language('extension/payment/paypercut');
 
         $output .= '<div class="container-fluid"><div class="alert alert-info" style="margin-top:15px;">'
