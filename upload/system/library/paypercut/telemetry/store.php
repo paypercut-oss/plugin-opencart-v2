@@ -42,6 +42,25 @@ class PaypercutTelemetryStore
         return self::$registry->get('db');
     }
 
+    /**
+     * Run a query, or report that storage is unavailable.
+     *
+     * Telemetry is diagnostic. A missing or unreadable table must mean "no
+     * debug session", never a fatal on the payment module's admin page — the
+     * same rule that stops the edge ever blocking a payment. A store running
+     * files newer than its installed schema is exactly this case.
+     *
+     * @return object|null  OpenCart's result object, or null when unavailable.
+     */
+    private static function run($sql)
+    {
+        try {
+            return self::db()->query($sql);
+        } catch (Exception $exception) {
+            return null;
+        }
+    }
+
     private static function table($name)
     {
         return '`' . DB_PREFIX . 'paypercut_telemetry_' . $name . '`';
@@ -62,7 +81,7 @@ class PaypercutTelemetryStore
 
         self::$tables_ready = true;
 
-        self::db()->query("
+        self::run("
             CREATE TABLE IF NOT EXISTS " . self::table('store') . " (
                 `store_key` varchar(64) NOT NULL,
                 `store_value` longtext NOT NULL,
@@ -71,7 +90,7 @@ class PaypercutTelemetryStore
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_general_ci;
         ");
 
-        self::db()->query("
+        self::run("
             CREATE TABLE IF NOT EXISTS " . self::table('lock') . " (
                 `lock_name` varchar(64) NOT NULL,
                 `owner` varchar(32) NOT NULL,
@@ -110,13 +129,13 @@ class PaypercutTelemetryStore
 
         $db = self::db();
 
-        $db->query("
+        self::run("
             DELETE FROM `" . DB_PREFIX . "setting`
             WHERE `code` = '" . $db->escape(self::SETTING_CODE) . "'
             AND `key` = '" . $db->escape(self::RECORD_KEY) . "'
         ");
 
-        $db->query("
+        self::run("
             INSERT INTO `" . DB_PREFIX . "setting`
             SET store_id = '0',
                 `code` = '" . $db->escape(self::SETTING_CODE) . "',
@@ -136,7 +155,7 @@ class PaypercutTelemetryStore
 
         $db = self::db();
 
-        $db->query("
+        self::run("
             DELETE FROM `" . DB_PREFIX . "setting`
             WHERE `code` = '" . $db->escape(self::SETTING_CODE) . "'
             AND `key` = '" . $db->escape(self::RECORD_KEY) . "'
@@ -161,14 +180,14 @@ class PaypercutTelemetryStore
 
         $db = self::db();
 
-        $query = $db->query("
+        $query = self::run("
             SELECT store_value FROM " . self::table('store') . "
             WHERE store_key = '" . $db->escape($key) . "'
             AND (expires_at = '0' OR expires_at > '" . (int)time() . "')
             LIMIT 1
         ");
 
-        if (!$query->num_rows) {
+        if ($query === null || !$query->num_rows) {
             return array();
         }
 
@@ -199,7 +218,7 @@ class PaypercutTelemetryStore
         $db = self::db();
         $expires_at = $ttl > 0 ? time() + (int)$ttl : 0;
 
-        $db->query("
+        self::run("
             REPLACE INTO " . self::table('store') . "
             SET store_key = '" . $db->escape($key) . "',
                 store_value = '" . $db->escape(json_encode($value)) . "',
@@ -217,7 +236,7 @@ class PaypercutTelemetryStore
 
         $db = self::db();
 
-        $db->query("
+        self::run("
             DELETE FROM " . self::table('store') . "
             WHERE store_key = '" . $db->escape($key) . "'
         ");
@@ -242,7 +261,7 @@ class PaypercutTelemetryStore
         $db = self::db();
         $owner = self::randomToken(16);
 
-        $db->query("
+        self::run("
             INSERT IGNORE INTO " . self::table('lock') . "
             SET lock_name = '" . $db->escape($name) . "',
                 owner = '" . $db->escape($owner) . "',
@@ -306,20 +325,20 @@ class PaypercutTelemetryStore
     {
         $db = self::db();
 
-        $query = $db->query("
+        $query = self::run("
             SELECT owner, claimed_at FROM " . self::table('lock') . "
             WHERE lock_name = '" . $db->escape($name) . "'
             LIMIT 1
         ");
 
-        return $query->num_rows ? $query->row : null;
+        return $query !== null && $query->num_rows ? $query->row : null;
     }
 
     private static function forceReleaseLock($name)
     {
         $db = self::db();
 
-        $db->query("
+        self::run("
             DELETE FROM " . self::table('lock') . "
             WHERE lock_name = '" . $db->escape($name) . "'
         ");
