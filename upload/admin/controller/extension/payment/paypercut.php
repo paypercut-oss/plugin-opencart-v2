@@ -4,6 +4,19 @@ class ControllerExtensionPaymentPaypercut extends Controller
     private $error = array();
 
     /**
+     * Every action on this controller may report a diagnostic event, and the
+     * event object is built as the argument to report() — so the classes have
+     * to exist before the action body runs, not once report() is entered.
+     * Loading here is the only placement that holds for an action added later.
+     */
+    public function __construct($registry)
+    {
+        parent::__construct($registry);
+
+        $this->telemetry();
+    }
+
+    /**
      * Absolute Paypercut API URL for the store's connection environment.
      */
     private function apiUrl($path)

@@ -3,6 +3,21 @@ define('PAYPERCUT_PLUGIN_VERSION', '1.0.5');
 
 class ControllerExtensionPaymentPaypercut extends Controller
 {
+
+    /**
+     * Checkout, the callbacks and the webhook all build their event object as
+     * the argument to report(), which is evaluated before report() is entered.
+     * The classes therefore have to exist before any action body runs.
+     */
+    public function __construct($registry)
+    {
+        parent::__construct($registry);
+
+        require_once DIR_SYSTEM . 'library/paypercut/telemetry/bootstrap.php';
+
+        PaypercutTelemetry::boot($this->registry, false);
+    }
+
     /**
      * Absolute Paypercut API URL for the store's connection environment.
      */
