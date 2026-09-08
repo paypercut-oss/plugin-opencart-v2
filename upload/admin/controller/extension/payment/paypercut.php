@@ -3,6 +3,48 @@ class ControllerExtensionPaymentPaypercut extends Controller
 {
     private $error = array();
 
+    /**
+     * Every action on this controller may report a diagnostic event, and the
+     * event object is built as the argument to report() — so the classes have
+     * to exist before the action body runs, not once report() is entered.
+     * Loading here is the only placement that holds for an action added later.
+     */
+    public function __construct($registry)
+    {
+        parent::__construct($registry);
+
+        $this->telemetry();
+    }
+
+    /**
+     * Absolute Paypercut API URL for the store's connection environment.
+     */
+    private function apiUrl($path)
+    {
+        require_once DIR_SYSTEM . 'library/paypercut/environment.php';
+
+        return PaypercutEnvironment::apiUrl($this->config->get('paypercut_environment'), $path);
+    }
+
+    /**
+     * Load the telemetry library and point it at this authenticated admin request.
+     */
+    private function telemetry()
+    {
+        require_once DIR_SYSTEM . 'library/paypercut/telemetry/bootstrap.php';
+
+        PaypercutTelemetry::boot($this->registry, true);
+    }
+
+    /**
+     * Report a diagnostic event. A no-op unless a debug session is running.
+     */
+    private function report($event)
+    {
+        $this->telemetry();
+        PaypercutTelemetry::record($event);
+    }
+
     public function index()
     {
         $this->load->language('extension/payment/paypercut');
@@ -11,8 +53,18 @@ class ControllerExtensionPaymentPaypercut extends Controller
 
         $this->load->model('setting/setting');
 
+        $this->telemetry();
+
         if (($this->request->server['REQUEST_METHOD'] == 'POST') && $this->validate()) {
+            $this->endSessionIfConnectionChanged();
+
             $this->model_setting_setting->editSetting('paypercut', $this->request->post);
+
+            // The session record lives outside the `paypercut` setting code, so
+            // it survives the delete-and-reinsert editSetting() performs - but a
+            // configuration changed mid-session would otherwise be read against
+            // the snapshot taken before it, and the timeline would lie.
+            $this->resendConfigurationSnapshot();
 
             $apple_file_status = $this->ensureAppleDomainAssociationFile();
             if (empty($apple_file_status['ok'])) {
@@ -126,6 +178,23 @@ class ControllerExtensionPaymentPaypercut extends Controller
         $api_key = isset($this->request->post['paypercut_api_key']) ? $this->request->post['paypercut_api_key'] : $this->config->get('paypercut_api_key');
         $data['paypercut_mode'] = $this->detectApiKeyMode($api_key);
 
+        // Connection environment. Both the payment API host and the telemetry
+        // edge host are derived from this one value.
+        require_once DIR_SYSTEM . 'library/paypercut/environment.php';
+
+        $environment = isset($this->request->post['paypercut_environment'])
+            ? $this->request->post['paypercut_environment']
+            : $this->config->get('paypercut_environment');
+
+        // stored(), not normalize(): the form must show the environment the
+        // debug session will actually resolve, or a store that never re-saved
+        // reads `production` here and is refused a session.
+        $data['paypercut_environment'] = PaypercutEnvironment::stored($environment);
+        $data['paypercut_environments'] = PaypercutEnvironment::all();
+        $data['paypercut_api_base'] = PaypercutEnvironment::apiBaseUri($data['paypercut_environment']);
+        $data['entry_environment'] = $this->language->get('entry_environment');
+        $data['help_environment'] = $this->language->get('help_environment');
+
         // Statement descriptor
         if (isset($this->request->post['paypercut_statement_descriptor'])) {
             $data['paypercut_statement_descriptor'] = $this->request->post['paypercut_statement_descriptor'];
@@ -226,6 +295,8 @@ class ControllerExtensionPaymentPaypercut extends Controller
         $data['text_apple_domain_file_refreshing'] = $this->language->get('text_apple_domain_file_refreshing');
         $data['button_apple_domain_refresh'] = $this->language->get('button_apple_domain_refresh');
 
+        $data = array_merge($data, $this->debugSessionViewData());
+
         $data['header'] = $this->load->controller('common/header');
         $data['column_left'] = $this->load->controller('common/column_left');
         $data['footer'] = $this->load->controller('common/footer');
@@ -238,6 +309,8 @@ class ControllerExtensionPaymentPaypercut extends Controller
 
     protected function validate()
     {
+        require_once DIR_SYSTEM . 'library/paypercut/environment.php';
+
         if (!$this->user->hasPermission('modify', 'extension/payment/paypercut')) {
             $this->error['warning'] = $this->language->get('error_permission');
         }
@@ -249,6 +322,16 @@ class ControllerExtensionPaymentPaypercut extends Controller
         // Ensure payment method domain is registered for wallet payments
         if (!empty($this->request->post['paypercut_api_key'])) {
             $domain_status = $this->ensurePaymentMethodDomain();
+
+            $this->report(PaypercutEvent::of('connection.validated', array(
+                'source' => 'settings_save',
+                'is_bnpl' => false,
+                'environment' => PaypercutEnvironment::stored(
+                    isset($this->request->post['paypercut_environment']) ? $this->request->post['paypercut_environment'] : ''
+                ),
+                'api_key_mode' => $this->detectApiKeyMode($this->request->post['paypercut_api_key'])
+            )));
+
             if (!$domain_status['success']) {
                 // Don't block saving, just show a warning
                 $this->session->data['warning'] = 'Settings saved, but domain registration failed: ' . $domain_status['message'] . '. Wallet payment methods (Apple Pay, Google Pay) may not work until the domain is properly registered in your Paypercut dashboard.';
@@ -366,7 +449,7 @@ class ControllerExtensionPaymentPaypercut extends Controller
     private function getWebhook($webhook_id)
     {
         $api_key = $this->config->get('paypercut_api_key');
-        $api_url = 'https://api.paypercut.io/v1/webhooks/' . $webhook_id;
+        $api_url = $this->apiUrl('v1/webhooks/' . $webhook_id);
 
         $ch = curl_init();
         curl_setopt($ch, CURLOPT_URL, $api_url);
@@ -390,7 +473,7 @@ class ControllerExtensionPaymentPaypercut extends Controller
     private function findWebhookByUrl($webhook_url)
     {
         $api_key = $this->config->get('paypercut_api_key');
-        $api_url = 'https://api.paypercut.io/v1/webhooks';
+        $api_url = $this->apiUrl('v1/webhooks');
 
         $ch = curl_init();
         curl_setopt($ch, CURLOPT_URL, $api_url);
@@ -413,7 +496,13 @@ class ControllerExtensionPaymentPaypercut extends Controller
                     }
                 }
             }
+
+            return null;
         }
+
+        $this->report(PaypercutEvent::failure('settings.webhooks_unreadable', 'lookup_failed', array(
+            'http_status' => (int)$http_code
+        )));
 
         return null;
     }
@@ -439,8 +528,14 @@ class ControllerExtensionPaymentPaypercut extends Controller
                 if ($existing) {
                     $json['error'] = 'Webhook already exists for this URL';
                     $json['webhook_id'] = $existing['id'];
+
+                    $this->report(PaypercutEvent::failure(
+                        'connection.webhook_registration_failed',
+                        'already_exists',
+                        array('source' => 'settings')
+                    ));
                 } else {
-                    $api_url = 'https://api.paypercut.io/v1/webhooks';
+                    $api_url = $this->apiUrl('v1/webhooks');
 
                     // Create webhook with all events enabled
                     $payload = array(
@@ -475,9 +570,23 @@ class ControllerExtensionPaymentPaypercut extends Controller
 
                         $json['success'] = 'Webhook created successfully';
                         $json['webhook_id'] = $result['id'];
+
+                        $this->report(PaypercutEvent::of('webhook.registered'));
+                        $this->report(PaypercutEvent::of('connection.webhook_registered', array('source' => 'settings')));
                     } else {
                         $error_data = json_decode($response, true);
                         $json['error'] = isset($error_data['message']) ? $error_data['message'] : 'Failed to create webhook';
+
+                        $this->report(PaypercutEvent::apiFailure(
+                            'webhook.registration_failed',
+                            $http_code,
+                            is_array($error_data) ? $error_data : array()
+                        ));
+                        $this->report(PaypercutEvent::failure(
+                            'connection.webhook_registration_failed',
+                            'rejected',
+                            array('source' => 'settings')
+                        ));
                     }
                 }
             }
@@ -502,7 +611,7 @@ class ControllerExtensionPaymentPaypercut extends Controller
                 $json['error'] = 'No webhook configured';
             } else {
                 $api_key = $this->config->get('paypercut_api_key');
-                $api_url = 'https://api.paypercut.io/v1/webhooks/' . $webhook_id;
+                $api_url = $this->apiUrl('v1/webhooks/' . $webhook_id);
 
                 $ch = curl_init();
                 curl_setopt($ch, CURLOPT_URL, $api_url);
@@ -526,8 +635,14 @@ class ControllerExtensionPaymentPaypercut extends Controller
                     $this->model_setting_setting->editSetting('paypercut', $settings);
 
                     $json['success'] = 'Webhook deleted successfully';
+
+                    $this->report(PaypercutEvent::of('webhook.deleted'));
                 } else {
                     $json['error'] = 'Failed to delete webhook';
+
+                    $this->report(PaypercutEvent::failure('webhook.delete_failed', 'rejected', array(
+                        'http_status' => (int)$http_code
+                    )));
                 }
             }
         }
@@ -592,7 +707,7 @@ class ControllerExtensionPaymentPaypercut extends Controller
     private function getPaymentMethodDomain($domain_name)
     {
         $api_key = $this->config->get('paypercut_api_key');
-        $api_url = 'https://api.paypercut.io/v1/payment_method_domains';
+        $api_url = $this->apiUrl('v1/payment_method_domains');
 
         $ch = curl_init();
         curl_setopt($ch, CURLOPT_URL, $api_url);
@@ -615,7 +730,13 @@ class ControllerExtensionPaymentPaypercut extends Controller
                     }
                 }
             }
+
+            return null;
         }
+
+        $this->report(PaypercutEvent::failure('settings.payment_domains_unreadable', 'lookup_failed', array(
+            'http_status' => (int)$http_code
+        )));
 
         return null;
     }
@@ -626,7 +747,7 @@ class ControllerExtensionPaymentPaypercut extends Controller
     private function registerPaymentMethodDomain($domain_name)
     {
         $api_key = $this->config->get('paypercut_api_key');
-        $api_url = 'https://api.paypercut.io/v1/payment_method_domains';
+        $api_url = $this->apiUrl('v1/payment_method_domains');
 
         $payload = array(
             'domain_name' => $domain_name
@@ -655,6 +776,9 @@ class ControllerExtensionPaymentPaypercut extends Controller
             $settings['paypercut_domain_id'] = $result['id'];
             $this->model_setting_setting->editSetting('paypercut', $settings);
 
+            $this->report(PaypercutEvent::of('payment_domain.registered'));
+            $this->report(PaypercutEvent::of('connection.payment_domain_registered', array('source' => 'settings')));
+
             return array(
                 'success' => true,
                 'message' => 'Domain registered successfully. Verification may be required.',
@@ -681,6 +805,19 @@ class ControllerExtensionPaymentPaypercut extends Controller
             // Log the error for debugging
             $this->log->write('Paypercut domain registration failed: HTTP ' . $http_code . ' - ' . $error_message . ' | Response: ' . $response);
 
+            // $error_message may quote the submitted domain back, so only the
+            // status and the platform's own code travel.
+            $this->report(PaypercutEvent::apiFailure(
+                'payment_domain.registration_failed',
+                $http_code,
+                is_array($error_data) ? $error_data : array()
+            ));
+            $this->report(PaypercutEvent::failure(
+                'connection.payment_domain_registration_failed',
+                'rejected',
+                array('source' => 'settings')
+            ));
+
             return array(
                 'success' => false,
                 'message' => $error_message . ' (HTTP ' . $http_code . ')',
@@ -696,6 +833,8 @@ class ControllerExtensionPaymentPaypercut extends Controller
     {
         $this->load->language('extension/payment/paypercut');
 
+        require_once DIR_SYSTEM . 'library/paypercut/environment.php';
+
         $json = array();
 
         if (!$this->user->hasPermission('modify', 'extension/payment/paypercut')) {
@@ -707,7 +846,7 @@ class ControllerExtensionPaymentPaypercut extends Controller
                 $json['error'] = 'API key is required';
             } else {
                 // Test connection by verifying account
-                $api_url = 'https://api.paypercut.io/v1/account';
+                $api_url = $this->apiUrl('v1/account');
 
                 $ch = curl_init();
                 curl_setopt($ch, CURLOPT_URL, $api_url);
@@ -721,21 +860,45 @@ class ControllerExtensionPaymentPaypercut extends Controller
                 $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
                 curl_close($ch);
 
+                $mode = $this->detectApiKeyMode($api_key);
+                $environment = PaypercutEnvironment::stored($this->config->get('paypercut_environment'));
+
                 if ($http_code == 200) {
                     $result = json_decode($response, true);
 
-                    $mode = $this->detectApiKeyMode($api_key);
                     $json['success'] = true;
                     $json['message'] = 'Connection successful!';
                     $json['mode'] = $mode;
                     if (isset($result['business_name'])) {
                         $json['account_name'] = $result['business_name'];
                     }
+
+                    $this->report(PaypercutEvent::of('connection.tested', array(
+                        'is_bnpl' => false,
+                        'ok' => true,
+                        'environment' => $environment,
+                        'api_key_mode' => $mode
+                    )));
                 } elseif ($http_code == 401) {
                     $json['error'] = 'Authentication failed. Please check your API key.';
+
+                    $this->report(PaypercutEvent::failure('connection.tested', 'credentials_rejected', array(
+                        'is_bnpl' => false,
+                        'ok' => false,
+                        'environment' => $environment,
+                        'http_status' => 401
+                    )));
                 } else {
                     $error_data = json_decode($response, true);
                     $json['error'] = isset($error_data['message']) ? $error_data['message'] : 'Connection failed with HTTP ' . $http_code;
+
+                    // $error_data['message'] is the platform's prose, never sent.
+                    $this->report(PaypercutEvent::apiFailure(
+                        'connection.tested',
+                        $http_code,
+                        is_array($error_data) ? $error_data : array(),
+                        array('is_bnpl' => false, 'ok' => false, 'environment' => $environment)
+                    ));
                 }
             }
         }
@@ -755,7 +918,7 @@ class ControllerExtensionPaymentPaypercut extends Controller
             return array();
         }
 
-        $api_url = 'https://api.paypercut.io/v1/payment-configs';
+        $api_url = $this->apiUrl('v1/payment-configs');
 
         $ch = curl_init();
         curl_setopt($ch, CURLOPT_URL, $api_url);
@@ -774,7 +937,606 @@ class ControllerExtensionPaymentPaypercut extends Controller
             return isset($result['items']) ? $result['items'] : array();
         }
 
+        $this->report(PaypercutEvent::failure('settings.payment_configs_unreadable', 'lookup_failed', array(
+            'http_status' => (int)$http_code
+        )));
+
         return array();
+    }
+
+
+    /**
+     * Whether the Start button is offered at all.
+     *
+     * Only `start` is gated: "the feature is off" must mean no new session can
+     * be minted, while stop and status stay reachable so a session that is
+     * already running can always be ended.
+     */
+    private function debugSessionStartEnabled()
+    {
+        return !defined('PAYPERCUT_TELEMETRY_DISABLED') || !constant('PAYPERCUT_TELEMETRY_DISABLED');
+    }
+
+    /**
+     * Panel data for the settings view, plus the backstop flush.
+     *
+     * The server paints the current state so the panel is correct with no round
+     * trip; the script then keeps the countdown and counters live.
+     */
+    private function debugSessionViewData()
+    {
+        $this->telemetry();
+
+        PaypercutTelemetrySession::reap();
+
+        // The panel's poll is the primary delivery trigger; this covers a
+        // merchant who started a session and then reloaded the settings page.
+        if (PaypercutTelemetrySession::isActiveFast() && PaypercutEventQueue::size() > 0) {
+            $flusher = new PaypercutFlusher();
+            $flusher->flushOnce();
+        }
+
+        $state = PaypercutTelemetrySession::describe();
+
+        $entries = PaypercutSentLog::all();
+        $log = array();
+
+        foreach ($entries as $entry) {
+            $log[] = array(
+                'occurred_at' => isset($entry['occurred_at']) ? (string)$entry['occurred_at'] : '',
+                'event' => isset($entry['event']) ? (string)$entry['event'] : '',
+                'detail' => $this->debugSessionEventDetail($entry)
+            );
+        }
+
+        // The panel and its script are rendered from the view, which only sees
+        // what is handed to it - so every string it uses is listed here.
+        $strings = array();
+
+        foreach (array(
+            'heading_telemetry',
+            'text_telemetry_idle_lead', 'text_telemetry_idle_help',
+            'text_telemetry_running', 'text_telemetry_started_by',
+            'text_telemetry_session_id', 'text_telemetry_last_session_id',
+            'text_telemetry_counters', 'text_telemetry_ended', 'text_telemetry_ended_help',
+            'text_telemetry_reference', 'text_telemetry_copied',
+            'text_telemetry_log_summary', 'text_telemetry_log_help',
+            'text_telemetry_log_time', 'text_telemetry_log_event',
+            'text_telemetry_log_detail', 'text_telemetry_log_raw',
+            'text_telemetry_modal_title', 'text_telemetry_modal_lead', 'text_telemetry_modal_duration',
+            'text_telemetry_starting', 'text_telemetry_stopping', 'text_telemetry_session_ended',
+            'text_telemetry_network_error', 'text_telemetry_admin_unreachable',
+            'button_telemetry_start', 'button_telemetry_start_confirm',
+            'button_telemetry_stop', 'button_telemetry_retry', 'button_telemetry_copy',
+            'button_telemetry_copy_json'
+        ) as $key) {
+            $strings[$key] = $this->language->get($key);
+        }
+
+        return array_merge($strings, array(
+            'telemetry_disclosure' => $this->debugSessionDisclosure(),
+            'telemetry_state' => $state,
+            'telemetry_now' => time(),
+            'telemetry_ends_at' => $state['expires_at'] > 0 ? date('H:i', $state['expires_at']) : '',
+            'telemetry_start_enabled' => $this->debugSessionStartEnabled(),
+            'telemetry_poll_seconds' => PaypercutTelemetrySession::POLL_INTERVAL_SECONDS,
+            'telemetry_log' => $log,
+            'telemetry_log_max' => PaypercutSentLog::MAX_ENTRIES,
+            'telemetry_log_raw' => json_encode($entries, defined('JSON_PRETTY_PRINT') ? JSON_PRETTY_PRINT : 0)
+        ));
+    }
+
+    /**
+     * The "what is shared" disclosure, rendered once and reused.
+     *
+     * The panel and the consent modal must show the same words, and those words
+     * must stay identical to the block in docs/telemetry.md and the store
+     * listing: a merchant agreeing to one thing while the documentation says
+     * another is a real problem regardless of who is reading.
+     */
+    private function debugSessionDisclosure()
+    {
+        require_once DIR_SYSTEM . 'library/paypercut/environment.php';
+
+        // The host the key is actually exchanged at, which is not
+        // api.paypercut.io on a store connected to stage or dev.
+        $mint_host = (string)parse_url(
+            PaypercutEnvironment::apiBaseUri(PaypercutEnvironment::stored($this->config->get('paypercut_environment'))),
+            PHP_URL_HOST
+        );
+
+        return '<div class="well well-sm">'
+            . '<p><strong>' . $this->language->get('text_telemetry_disclosure_heading') . '</strong></p>'
+            . '<p>' . $this->language->get('text_telemetry_disclosure_shared') . '</p>'
+            . '<p><strong>' . $this->language->get('text_telemetry_disclosure_not_shared_label') . '</strong> '
+            . $this->language->get('text_telemetry_disclosure_not_shared') . '</p>'
+            . '<p>' . sprintf($this->language->get('text_telemetry_disclosure_key'), htmlspecialchars($mint_host, ENT_QUOTES, 'UTF-8')) . '</p>'
+            . '<p>' . $this->language->get('text_telemetry_disclosure_retention') . '</p>'
+            . '</div>';
+    }
+
+    /**
+     * One line summarising an event, so the table is scannable without the JSON.
+     */
+    private function debugSessionEventDetail($entry)
+    {
+        $parts = array();
+        $error = isset($entry['error']) && is_array($entry['error']) ? $entry['error'] : array();
+
+        if (isset($error['code'])) {
+            $parts[] = (string)$error['code'];
+        }
+
+        foreach (array('order_ref', 'payment_id', 'payment_intent_id') as $key) {
+            if (!empty($entry[$key])) {
+                $parts[] = $key . '=' . (string)$entry[$key];
+            }
+        }
+
+        $attrs = isset($entry['attrs']) && is_array($entry['attrs']) ? $entry['attrs'] : array();
+
+        foreach (array('origin_plugin', 'http_status', 'reason', 'webhook') as $key) {
+            if (isset($attrs[$key]) && is_scalar($attrs[$key])) {
+                $parts[] = $key . '=' . (string)$attrs[$key];
+            }
+        }
+
+        // Lifecycle events carry none of the keys above, and a row of dashes
+        // tells the merchant nothing. Fall back to whatever the event does have.
+        if (empty($parts)) {
+            foreach ($attrs as $key => $value) {
+                if (count($parts) >= 3) {
+                    break;
+                }
+
+                if (is_scalar($value)) {
+                    $parts[] = $key . '=' . (is_bool($value) ? ($value ? 'true' : 'false') : (string)$value);
+                }
+            }
+        }
+
+        return empty($parts) ? '-' : implode(' . ', $parts);
+    }
+
+    /**
+     * End a live session when the credential or environment is about to change.
+     *
+     * end() is the single teardown path, so a re-key cannot leave a token
+     * behind that no later request knows to destroy.
+     */
+    private function endSessionIfConnectionChanged()
+    {
+        $this->telemetry();
+
+        $record = PaypercutTelemetrySession::record();
+
+        if (!isset($record['status']) || $record['status'] !== 'active') {
+            return;
+        }
+
+        require_once DIR_SYSTEM . 'library/paypercut/environment.php';
+
+        $api_key = isset($this->request->post['paypercut_api_key']) ? (string)$this->request->post['paypercut_api_key'] : '';
+        $environment = PaypercutEnvironment::stored(
+            isset($this->request->post['paypercut_environment']) ? $this->request->post['paypercut_environment'] : ''
+        );
+
+        if (PaypercutTelemetrySession::fingerprint($api_key) !== (string)$record['key_fingerprint']) {
+            PaypercutTelemetrySession::end('key_changed');
+            return;
+        }
+
+        if ($environment !== (string)$record['environment']) {
+            PaypercutTelemetrySession::end('environment_changed');
+        }
+    }
+
+    /**
+     * Re-send the configuration snapshot after a mid-session settings save.
+     */
+    private function resendConfigurationSnapshot()
+    {
+        $this->telemetry();
+
+        if (!PaypercutTelemetrySession::isActiveFast()) {
+            return;
+        }
+
+        // OpenCart does not reload $config after editSetting(), so the snapshot
+        // would otherwise describe the settings as they were before this save.
+        foreach ($this->request->post as $key => $value) {
+            if (strpos($key, 'paypercut_') === 0 && is_scalar($value)) {
+                $this->config->set($key, $value);
+            }
+        }
+
+        PaypercutEventQueue::append(array(
+            PaypercutEvent::environmentConfiguration(PaypercutEnvironmentSnapshot::values())->envelope()
+        ));
+    }
+
+    /**
+     * Start a debug session: mint a token and publish the session.
+     *
+     * OpenCart's admin `token` query parameter is the CSRF token and is checked
+     * by the admin startup controller before this route runs.
+     */
+    public function startDebugSession()
+    {
+        $this->load->language('extension/payment/paypercut');
+        $this->telemetry();
+
+        if (!PaypercutTelemetryContext::canManage()) {
+            $this->respondJson(array('message' => $this->language->get('error_permission')), 403);
+            return;
+        }
+
+        if (!$this->debugSessionStartEnabled()) {
+            $this->respondJson(array('message' => $this->language->get('error_telemetry_disabled')), 403);
+            return;
+        }
+
+        PaypercutTelemetrySession::reap();
+
+        $state = PaypercutTelemetrySession::describe();
+
+        if ($state['state'] === 'running') {
+            $state['already_running'] = true;
+            $state['now'] = time();
+
+            $this->respondJson(array('success' => true, 'data' => $state), 200);
+            return;
+        }
+
+        if (!PaypercutTelemetrySession::claimStartLock()) {
+            $this->respondJson(array('message' => $this->language->get('error_telemetry_start_locked')), 409);
+            return;
+        }
+
+        // Built inside the guard and emitted outside it: respondJson() ends the
+        // request, and a response sent before the release would strand the
+        // start lock for its full TTL and block the merchant's next attempt.
+        // Throwable as well as Exception: on PHP 7 an Error is neither, and an
+        // unreleased lock refuses the merchant's next attempt for a minute.
+        try {
+            $result = $this->mintDebugSession();
+        } catch (Exception $e) {
+            PaypercutTelemetrySession::releaseStartLock();
+
+            throw $e;
+        } catch (Throwable $e) {
+            PaypercutTelemetrySession::releaseStartLock();
+
+            throw $e;
+        }
+
+        PaypercutTelemetrySession::releaseStartLock();
+
+        $this->respondJson(
+            $result['ok'] ? array('success' => true, 'data' => $result['data']) : $result['data'],
+            $result['status']
+        );
+    }
+
+    private function mintDebugSession()
+    {
+        require_once DIR_SYSTEM . 'library/paypercut/environment.php';
+
+        $connection = PaypercutTelemetrySession::connection();
+
+        if ($connection['secret'] === '') {
+            return $this->debugSessionError(
+                array('message' => $this->language->get('error_telemetry_no_key')),
+                400
+            );
+        }
+
+        /*
+         * Both hosts come from this one environment value, resolved here in one
+         * sequence. A token minted for one environment is rejected by every
+         * other environment's edge, so they are never resolved independently.
+         */
+        $mint_base = PaypercutEnvironment::apiBaseUri($connection['environment']);
+        $edge_base = PaypercutEnvironment::telemetryBaseUri($connection['environment']);
+
+        if ($edge_base === '') {
+            return $this->debugSessionError(
+                array(
+                    'message' => $connection['environment'] === ''
+                        ? $this->language->get('error_telemetry_no_environment')
+                        : $this->language->get('error_telemetry_environment_unsupported')
+                ),
+                400
+            );
+        }
+
+        $minter = new PaypercutTokenMinter();
+        $response = $minter->mint($connection['secret'], $mint_base);
+        $status = (int)$response['status'];
+
+        if ($status !== 200) {
+            return $this->rejectDebugSession(PaypercutMintErrorMapper::map($status, $response['body']), $response, $status);
+        }
+
+        if ($response['token'] === '' || $response['expires_at'] === '') {
+            return $this->rejectDebugSession(PaypercutMintErrorMapper::badResponse(), $response, 502);
+        }
+
+        $now = time();
+        $lifetime = PaypercutTokenMinter::deriveLifetime($response['expires_at'], $response['date'], $now);
+        $skew = PaypercutTokenMinter::skew($response['date'], $now);
+
+        if ($lifetime < PaypercutTelemetrySession::MIN_LIFETIME_SECONDS) {
+            return $this->rejectDebugSession(PaypercutMintErrorMapper::clockSkew($skew), $response, 400);
+        }
+
+        $expires_at = $now
+            + min($lifetime, PaypercutTelemetrySession::SESSION_MAX_SECONDS)
+            - PaypercutTelemetrySession::SKEW_SECONDS;
+
+        /*
+         * Re-check under the lock: if anything published a session while the
+         * mint was in flight, discard this token rather than store a second
+         * one. An unreferenced token cannot be deleted by any teardown path.
+         */
+        $existing = PaypercutTelemetrySession::describe();
+
+        if ($existing['state'] === 'running') {
+            $existing['already_running'] = true;
+            $existing['now'] = time();
+
+            return array('ok' => true, 'data' => $existing, 'status' => 200);
+        }
+
+        $session_id = PaypercutTelemetrySession::newSessionId();
+
+        PaypercutTelemetrySession::begin(
+            array(
+                'status' => 'active',
+                'session_id' => $session_id,
+                'environment' => $connection['environment'],
+                'edge_base' => $edge_base,
+                'started_at' => $now,
+                'expires_at' => $expires_at,
+                'started_by' => (int)$this->user->getId(),
+                'started_by_name' => (string)$this->user->getUserName(),
+                'key_fingerprint' => PaypercutTelemetrySession::fingerprint($connection['secret']),
+                'ended_at' => 0,
+                'reason_code' => '',
+                'trace_id' => PaypercutEvent::identifier($response['trace_id']),
+                'request_id' => PaypercutEvent::identifier($response['request_id'])
+            ),
+            $response['token']
+        );
+
+        $snapshot = PaypercutEnvironmentSnapshot::values();
+
+        $envelopes = array(
+            PaypercutEvent::sessionStarted($session_id, $connection['environment'], $expires_at)->envelope(),
+            PaypercutEvent::environmentSnapshot($snapshot)->envelope(),
+            PaypercutEvent::environmentConfiguration($snapshot)->envelope()
+        );
+
+        // The list support compares against a working store when a conflict is
+        // suspected; chunked because a store can run more extensions than one
+        // event has room for.
+        foreach (PaypercutEvent::environmentPlugins(PaypercutActiveExtensions::values()) as $event) {
+            $envelopes[] = $event->envelope();
+        }
+
+        PaypercutEventQueue::append($envelopes);
+
+        PaypercutTelemetrySession::audit(
+            'Telemetry: debug session started',
+            array(
+                'session_id' => $session_id,
+                'environment' => $connection['environment'],
+                'expires_at' => $expires_at,
+                'clock_skew_s' => $skew
+            )
+        );
+
+        $state = PaypercutTelemetrySession::describe();
+        $state['now'] = time();
+
+        return array('ok' => true, 'data' => $state, 'status' => 200);
+    }
+
+    /**
+     * Record a start that did not happen, so the merchant can see why.
+     */
+    private function rejectDebugSession($mapped, $response, $status)
+    {
+        $trace_id = PaypercutEvent::identifier($response['trace_id']);
+        $request_id = PaypercutEvent::identifier($response['request_id']);
+
+        PaypercutTelemetrySession::fail($mapped, $trace_id, $request_id);
+
+        PaypercutTelemetrySession::audit(
+            'Telemetry: mint rejected',
+            array(
+                'status' => (int)$response['status'],
+                'reason_code' => $mapped['reason_code'],
+                'trace_id' => $trace_id,
+                'request_id' => $request_id
+            )
+        );
+
+        return $this->debugSessionError(
+            array(
+                'message' => $mapped['message'],
+                'reason_code' => $mapped['reason_code'],
+                'retryable' => $mapped['retryable'],
+                'trace_id' => $trace_id,
+                'request_id' => $request_id
+            ),
+            $status
+        );
+    }
+
+    private function debugSessionError($data, $status)
+    {
+        return array(
+            'ok' => false,
+            'data' => $data,
+            'status' => $status >= 400 && $status < 600 ? $status : 502
+        );
+    }
+
+    /**
+     * End the session early at the merchant's request.
+     */
+    public function stopDebugSession()
+    {
+        $this->load->language('extension/payment/paypercut');
+        $this->telemetry();
+
+        if (!PaypercutTelemetryContext::canManage()) {
+            $this->respondJson(array('message' => $this->language->get('error_permission')), 403);
+            return;
+        }
+
+        $record = PaypercutTelemetrySession::record();
+        $runtime = PaypercutTelemetrySession::runtime();
+
+        if (isset($record['status']) && $record['status'] === 'active') {
+            PaypercutEventQueue::append(array(
+                PaypercutEvent::sessionStopped(
+                    (string)$record['session_id'],
+                    'merchant_stopped',
+                    (int)(isset($runtime['events_sent']) ? $runtime['events_sent'] : 0),
+                    (int)(isset($runtime['events_dropped']) ? $runtime['events_dropped'] : 0)
+                )->envelope()
+            ));
+
+            /*
+             * Twice: the first pass clears anything already parked in flight,
+             * the second carries the stop event itself. Without it, end() would
+             * delete the queue holding the event that announces the stop.
+             * Bounded on purpose - each pass can block for up to the edge
+             * timeout, and this is a button click.
+             */
+            $flusher = new PaypercutFlusher();
+
+            for ($attempt = 0; $attempt < 2; $attempt++) {
+                if (!$flusher->flushOnce()) {
+                    break;
+                }
+            }
+        }
+
+        PaypercutTelemetrySession::end('merchant_stopped');
+
+        $state = PaypercutTelemetrySession::describe();
+        $state['now'] = time();
+
+        $this->respondJson(array('success' => true, 'data' => $state), 200);
+    }
+
+    /**
+     * The panel's poll, which doubles as the delivery trigger.
+     *
+     * An authenticated admin request is the only place events are sent from, so
+     * while the merchant has this screen open, this is what drains the queue.
+     */
+    public function debugSessionStatus()
+    {
+        $this->load->language('extension/payment/paypercut');
+        $this->telemetry();
+
+        if (!PaypercutTelemetryContext::canManage()) {
+            $this->respondJson(array('message' => $this->language->get('error_permission')), 403);
+            return;
+        }
+
+        PaypercutTelemetrySession::reap();
+
+        $flusher = new PaypercutFlusher();
+        $flusher->flushOnce();
+
+        // `now` travels with `expires_at` so the countdown is driven by the
+        // server's clock; a browser with a wrong clock would otherwise show a
+        // remaining time that does not match when the session actually ends.
+        $state = PaypercutTelemetrySession::describe();
+        $state['now'] = time();
+
+        $this->respondJson(array('success' => true, 'data' => $state), 200);
+    }
+
+    /**
+     * Tell every administrator that this store is currently sending diagnostics.
+     *
+     * Fired from admin/view/common/header/after. The permission is held by more
+     * than one user and the extension's own logger is gated on a merchant
+     * preference, so without this a session could run with no visible trace for
+     * anyone but the person who started it.
+     */
+    public function debugSessionNotice(&$route, &$data, &$output)
+    {
+        $this->telemetry();
+
+        if (!PaypercutTelemetryContext::canManage()) {
+            return;
+        }
+
+        $record = PaypercutTelemetrySession::record();
+
+        if (!isset($record['status']) || $record['status'] !== 'active'
+            || (int)$record['expires_at'] <= time()) {
+            return;
+        }
+
+        // Support asks a merchant to start a session and reproduce the problem.
+        // They leave for the storefront to do that, where nothing delivers, so
+        // the events from the reproduction wait for them to find their way back
+        // to the extension's own screen — and expire with the session if they
+        // never do. This event renders on every admin page, so delivery rides
+        // along with the notice. Bounded to one batch: the panel's poll drains
+        // the rest, and a shopper must never wait on a call to Paypercut.
+        PaypercutTelemetrySession::reap();
+
+        if (PaypercutTelemetrySession::isActiveFast() && PaypercutEventQueue::size() > 0) {
+            $flusher = new PaypercutFlusher();
+            $flusher->flushOnce();
+        }
+
+        $this->load->language('extension/payment/paypercut');
+
+        $output .= '<div class="container-fluid"><div class="alert alert-info" style="margin-top:15px;">'
+            . '<i class="fa fa-info-circle"></i> '
+            . sprintf(
+                $this->language->get('text_telemetry_notice'),
+                htmlspecialchars((string)$record['started_by_name'], ENT_QUOTES, 'UTF-8'),
+                date('H:i', (int)$record['expires_at'])
+            )
+            . ' <a href="' . htmlspecialchars(
+                $this->url->link('extension/payment/paypercut', 'token=' . $this->session->data['token'], true),
+                ENT_QUOTES,
+                'UTF-8'
+            ) . '">' . $this->language->get('text_telemetry_manage') . '</a>'
+            . '</div></div>';
+    }
+
+    private function respondJson($payload, $status)
+    {
+        $protocol = isset($this->request->server['SERVER_PROTOCOL']) ? $this->request->server['SERVER_PROTOCOL'] : 'HTTP/1.1';
+
+        $this->response->addHeader($protocol . ' ' . (int)$status . ' ' . self::statusText($status));
+        $this->response->addHeader('Content-Type: application/json');
+        $this->response->setOutput(json_encode($payload));
+    }
+
+    private static function statusText($status)
+    {
+        $texts = array(
+            200 => 'OK',
+            400 => 'Bad Request',
+            403 => 'Forbidden',
+            409 => 'Conflict',
+            502 => 'Bad Gateway'
+        );
+
+        return isset($texts[(int)$status]) ? $texts[(int)$status] : 'OK';
     }
 
     /**
@@ -868,12 +1630,25 @@ class ControllerExtensionPaymentPaypercut extends Controller
         // Failure here does not abort install — the admin settings banner surfaces it.
         $this->ensureAppleDomainAssociationFile();
 
+        // Debug-session storage. Created here and re-checked lazily at runtime,
+        // so a store that upgrades without re-installing still gets them.
+        $this->telemetry();
+        PaypercutTelemetryStore::ensureTables();
+
         // Register event for order info page to display Paypercut payment information
         $this->load->model('extension/event');
         $this->model_extension_event->addEvent(
             'paypercut_order_info',
             'admin/view/sale/order_info/after',
             'sale/paypercut_order/info'
+        );
+
+        // Every admin page, so a running debug session is visible to everyone
+        // who can manage the extension - not only whoever started it.
+        $this->model_extension_event->addEvent(
+            'paypercut_debug_session_notice',
+            'admin/view/common/header/after',
+            'extension/payment/paypercut/debugSessionNotice'
         );
     }
 
@@ -883,9 +1658,12 @@ class ControllerExtensionPaymentPaypercut extends Controller
      */
     public function uninstall()
     {
-        // Remove event
+        // Remove events
         $this->load->model('extension/event');
         $this->model_extension_event->deleteEvent('paypercut_order_info');
+        $this->model_extension_event->deleteEvent('paypercut_debug_session_notice');
+
+        $this->removeTelemetryData();
 
         // Note: We intentionally don't drop database tables to preserve transaction history.
         // We also intentionally leave <opencart_root>/.well-known/apple-developer-merchantid-domain-association
@@ -897,6 +1675,35 @@ class ControllerExtensionPaymentPaypercut extends Controller
         // - oc_paypercut_transaction
         // - oc_paypercut_refund
         // - oc_paypercut_webhook_log
+    }
+
+    /**
+     * Destroy every trace of a debug session on uninstall.
+     *
+     * end() is the single teardown path and removes the token, the queue, the
+     * inflight buffer and the runtime record; the sent log and both lock rows
+     * are removed here because nothing else references them afterwards.
+     */
+    private function removeTelemetryData()
+    {
+        $this->telemetry();
+
+        PaypercutTelemetrySession::end('deactivated');
+
+        PaypercutSentLog::clear();
+        PaypercutTelemetryStore::deleteRecord();
+
+        foreach (array(
+            PaypercutTelemetrySession::TOKEN_KEY,
+            PaypercutTelemetrySession::QUEUE_KEY,
+            PaypercutTelemetrySession::INFLIGHT_KEY,
+            PaypercutTelemetrySession::RUNTIME_KEY,
+            PaypercutSentLog::KEY
+        ) as $key) {
+            PaypercutTelemetryStore::delete($key);
+        }
+
+        $this->db->query("DELETE FROM `" . DB_PREFIX . "paypercut_telemetry_lock`");
     }
 
     /**
