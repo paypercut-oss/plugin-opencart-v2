@@ -1,5 +1,5 @@
 <?php
-define('PAYPERCUT_PLUGIN_VERSION', '1.1.0');
+define('PAYPERCUT_PLUGIN_VERSION', '1.1.1');
 
 class ControllerExtensionPaymentPaypercut extends Controller
 {

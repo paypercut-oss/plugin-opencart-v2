@@ -1650,6 +1650,14 @@ class ControllerExtensionPaymentPaypercut extends Controller
             'admin/view/common/header/after',
             'extension/payment/paypercut/debugSessionNotice'
         );
+
+        // Grant the current admin's group access to the order-management route,
+        // else refund/capture/cancel hit "Permission Denied".
+        $this->load->model('user/user_group');
+        $group_id = $this->user->getGroupId();
+        foreach (array('access', 'modify') as $type) {
+            $this->model_user_user_group->addPermission($group_id, $type, 'sale/paypercut_order');
+        }
     }
 
     /**
@@ -1662,6 +1670,12 @@ class ControllerExtensionPaymentPaypercut extends Controller
         $this->load->model('extension/event');
         $this->model_extension_event->deleteEvent('paypercut_order_info');
         $this->model_extension_event->deleteEvent('paypercut_debug_session_notice');
+
+        $this->load->model('user/user_group');
+        $group_id = $this->user->getGroupId();
+        foreach (array('access', 'modify') as $type) {
+            $this->model_user_user_group->removePermission($group_id, $type, 'sale/paypercut_order');
+        }
 
         $this->removeTelemetryData();
 

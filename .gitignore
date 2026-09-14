@@ -23,3 +23,6 @@ vqmod/checked.cache
 vqmod/mods.cache
 
 .idea
+
+# build output — ocmod zip is a GitHub Release asset, not committed
+/dist/

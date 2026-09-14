@@ -115,6 +115,12 @@ class ControllerSalePaypercutOrder extends Controller
     {
         $this->load->language('extension/payment/paypercut');
 
+        // Load telemetry classes up-front: each $this->report(PaypercutEvent::...) below
+        // evaluates PaypercutEvent:: before report() would require it, so without this the
+        // first event throws "Class PaypercutEvent not found" (500) — after the refund has
+        // already been sent to the gateway.
+        require_once DIR_SYSTEM . 'library/paypercut/telemetry/bootstrap.php';
+
         $json = array();
 
         // Check permission
@@ -222,7 +228,7 @@ class ControllerSalePaypercutOrder extends Controller
                     $this->db->query("
                         INSERT INTO `" . DB_PREFIX . "order_history`
                         SET order_id = '" . (int)$order_id . "',
-                            order_status_id = '" . (int)$this->config->get('payment_paypercut_order_status_id') . "',
+                            order_status_id = '" . (int)$this->config->get('paypercut_order_status_id') . "',
                             notify = '0',
                             comment = '" . $this->db->escape($comment) . "',
                             date_added = NOW()
@@ -313,7 +319,7 @@ class ControllerSalePaypercutOrder extends Controller
      */
     private function processRefund($payment_id, $payment_intent, $amount, $currency, $reason = '')
     {
-        $api_key = $this->config->get('payment_paypercut_api_key');
+        $api_key = $this->config->get('paypercut_api_key');
         $api_url = $this->apiUrl('v1/refunds');
 
         if (!$api_key) {
@@ -456,7 +462,7 @@ class ControllerSalePaypercutOrder extends Controller
     private function logError($message)
     {
         // Check if logging is enabled
-        if (!$this->config->get('payment_paypercut_logging')) {
+        if (!$this->config->get('paypercut_logging')) {
             return;
         }
 
@@ -494,7 +500,7 @@ class ControllerSalePaypercutOrder extends Controller
 
         if (!$json) {
             try {
-                $api_key = $this->config->get('payment_paypercut_api_key');
+                $api_key = $this->config->get('paypercut_api_key');
                 $payment_id = $transaction['payment_id'];
 
                 $api_url = $this->apiUrl('v1/payments/' . $payment_id);
@@ -586,7 +592,7 @@ class ControllerSalePaypercutOrder extends Controller
 
         if (!$json) {
             try {
-                $api_key = $this->config->get('payment_paypercut_api_key');
+                $api_key = $this->config->get('paypercut_api_key');
                 $payment_id = $transaction['payment_id'];
 
                 $api_url = $this->apiUrl('v1/payments/' . $payment_id . '/capture');
@@ -634,7 +640,7 @@ class ControllerSalePaypercutOrder extends Controller
                     $this->db->query("
                         INSERT INTO `" . DB_PREFIX . "order_history`
                         SET order_id = '" . (int)$order_id . "',
-                            order_status_id = '" . (int)$this->config->get('payment_paypercut_order_status_id') . "',
+                            order_status_id = '" . (int)$this->config->get('paypercut_order_status_id') . "',
                             notify = '0',
                             comment = '" . $this->db->escape($comment) . "',
                             date_added = NOW()
@@ -690,7 +696,7 @@ class ControllerSalePaypercutOrder extends Controller
 
         if (!$json) {
             try {
-                $api_key = $this->config->get('payment_paypercut_api_key');
+                $api_key = $this->config->get('paypercut_api_key');
                 $payment_id = $transaction['payment_id'];
 
                 $api_url = $this->apiUrl('v1/payments/' . $payment_id . '/cancel');
