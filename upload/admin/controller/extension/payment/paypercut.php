@@ -1651,12 +1651,14 @@ class ControllerExtensionPaymentPaypercut extends Controller
             'extension/payment/paypercut/debugSessionNotice'
         );
 
-        // Grant the current admin's group access to the order-management route,
-        // else refund/capture/cancel hit "Permission Denied".
+        // Grant the current admin's group access to the plugin's custom admin
+        // routes, else refund/capture/cancel and the logs viewer hit "Permission Denied".
         $this->load->model('user/user_group');
         $group_id = $this->user->getGroupId();
-        foreach (array('access', 'modify') as $type) {
-            $this->model_user_user_group->addPermission($group_id, $type, 'sale/paypercut_order');
+        foreach (array('sale/paypercut_order', 'sale/paypercut_logs') as $route) {
+            foreach (array('access', 'modify') as $type) {
+                $this->model_user_user_group->addPermission($group_id, $type, $route);
+            }
         }
     }
 
@@ -1673,8 +1675,10 @@ class ControllerExtensionPaymentPaypercut extends Controller
 
         $this->load->model('user/user_group');
         $group_id = $this->user->getGroupId();
-        foreach (array('access', 'modify') as $type) {
-            $this->model_user_user_group->removePermission($group_id, $type, 'sale/paypercut_order');
+        foreach (array('sale/paypercut_order', 'sale/paypercut_logs') as $route) {
+            foreach (array('access', 'modify') as $type) {
+                $this->model_user_user_group->removePermission($group_id, $type, $route);
+            }
         }
 
         $this->removeTelemetryData();
