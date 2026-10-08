@@ -7,6 +7,41 @@ verification, and 13-locale translations.
 > `CLAUDE.md` and `AGENTS.md` are symlinks to this file — always edit
 > `README.md`, never the symlinks.
 
+## Download the plugin (merchants start here)
+
+The file you install in OpenCart is a ZIP named
+`paypercut-opencartv2-X.Y.Z.ocmod.zip` (`X.Y.Z` is the version number, for
+example `paypercut-opencartv2-1.1.2.ocmod.zip`). It is published on the
+**Releases** page of this repository, not in the code files.
+
+1. Open the latest release: <https://github.com/paypercut-oss/plugin-opencart-v2/releases/latest>
+   (all versions: <https://github.com/paypercut-oss/plugin-opencart-v2/releases>).
+2. Scroll down to the **Assets** section at the bottom of the release.
+3. Click `paypercut-opencartv2-X.Y.Z.ocmod.zip` to download it.
+
+Things to know:
+
+- **Do not unzip it.** OpenCart installs the `.ocmod.zip` file as it is.
+- **Do not use the green *Code → Download ZIP* button** on the repository
+  page, and do not use the `Source code (zip)` / `Source code (tar.gz)` links in
+  the Assets list. Those are a copy of the source code (including developer files),
+  not the installable module.
+- The `.ocmod.zip` is created automatically by the release workflow
+  ([`.github/workflows/release-zip.yml`](.github/workflows/release-zip.yml)).
+  The release marked **Latest** is the newest version.
+
+### Install it in OpenCart 2.x
+
+1. In OpenCart admin, go to **Extensions → Installer** and upload the
+   `.ocmod.zip`. Wait for the success message.
+2. Go to **Extensions → Modifications** and click **Refresh** (top-right).
+3. Go to **Extensions → Extensions**, choose **Payments** in the filter, find
+   **Paypercut Payments** and click **Install** (green plus).
+4. Click **Edit** (blue pencil) to open the settings, fill them in and save.
+
+Upgrading from an older version, rolling back and troubleshooting:
+[`docs/runbooks/install-upgrade-module.md`](docs/runbooks/install-upgrade-module.md).
+
 ## Layout
 
 ```
