@@ -27,9 +27,8 @@ Things to know:
   the Assets list. Those are a copy of the source code (including developer files),
   not the installable module.
 - The `.ocmod.zip` is created automatically by the release workflow
-  ([`.github/workflows/release-zip.yml`](.github/workflows/release-zip.yml))
-  every time a version tag (`v1.1.2`, `v1.2.0`, …) is pushed. The release
-  marked **Latest** is the newest version.
+  ([`.github/workflows/release-zip.yml`](.github/workflows/release-zip.yml)).
+  The release marked **Latest** is the newest version.
 
 ### Install it in OpenCart 2.x
 
